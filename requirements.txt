@@ -1,0 +1,8 @@
+music21
+mido
+pretty_midi
+mlx
+mlx-lm
+huggingface_hub
+numpy
+tqdm

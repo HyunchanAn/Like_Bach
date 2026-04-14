@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Like Bach v2.6 - Musical Barline Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet">
+    <style>
+        :root { --gold: #d4af37; --bg: #0a0a0a; --surface: #151515; --paper: #fdfdfd; }
+        body { background: var(--bg); color: var(--gold); font-family: 'Marcellus', serif; display: flex; flex-direction: column; align-items: center; padding: 2rem; margin: 0; }
+        .container { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 1.5rem; }
+        .card { background: var(--surface); padding: 1.2rem; border-radius: 12px; border: 1px solid rgba(212,175,55,0.2); box-shadow: 0 10px 40px rgba(0,0,0,0.8); position: relative; }
+        .staff-view { background: var(--paper); border-radius: 8px; border: 2px solid var(--gold); overflow-x: auto; position: relative; }
+        #subject-view { height: 180px; cursor: crosshair; }
+        #full-score-view { height: 320px; overflow: hidden; }
+        .playhead-fixed { position: absolute; top: 1.2rem; left: 180px; width: 2px; height: 320px; background: #ff3333; z-index: 1000; display: none; box-shadow: 0 0 15px #ff3333; }
+        #ghost-pointer { position: absolute; pointer-events: none; width: 10px; height: 10px; border-radius: 50%; background: rgba(180, 180, 180, 0.7); border: 1px solid #555; display: none; transform: translate(-50%, -50%); z-index: 100; }
+        #ghost-label { position: absolute; pointer-events: none; font-size: 0.75rem; color: #333; font-weight: bold; background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; display: none; transform: translate(12px, -15px); z-index: 101; }
+        .controls { display: flex; justify-content: center; gap: 1rem; margin: 1rem 0; }
+        button { padding: 0.7rem 1.4rem; background: transparent; border: 1px solid var(--gold); color: var(--gold); font-family: inherit; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.3s; font-size: 0.9rem; }
+        button:hover { background: var(--gold); color: black; }
+        button.active { background: var(--gold); color: black; }
+        #status { text-align: center; min-height: 1.5rem; }
+    </style>
+</head>
+<body>
+<div class="playhead-fixed" id="playhead-fixed"></div>
+<div class="container">
+    <header style="text-align:center"><h1>LIKE BACH <span style="font-size:0.7rem; opacity:0.6">PRO v2.6</span></h1></header>
+    <div class="card">
+        <div id="subject-view" class="staff-view"><div id="ghost-pointer"></div><div id="ghost-label"></div></div>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <button class="dur-btn active" onclick="setDur('q', 1.0, this)">4분</button>
+            <button class="dur-btn" onclick="setDur('8', 0.5, this)">8분</button>
+            <button class="dur-btn" onclick="setDur('16', 0.25, this)">16분</button>
+            <span id="score-info" style="align-self:center; font-size:0.8rem; opacity:0.6">0 Measures | 4/4 Time</span>
+        </div>
+    </div>
+    <div id="status">Barlines restored. Ready for polyphony.</div>
+    <div class="controls"><button onclick="reset()">초기화</button><button onclick="composeAndPlay()">대위법적 전곡 작곡 및 연주</button></div>
+    <div class="card" id="full-score-card" style="display:none"><div id="full-score-view" class="staff-view"></div></div>
+</div>
+<script>
+    const VF = Vex.Flow;
+    let subject = [], rendererSub, ctxSub, curDur='q', curVal=1.0, currentGhost=null, dynamicMap = [];
+    const keyMap = {'f/5':77,'e/5':76,'d/5':74,'c/5':72,'b/4':71,'a/4':69,'g/4':67,'f/4':65,'e/4':64,'d/4':62,'c/4':60,'b/3':59,'a/3':57};
+    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+
+    function setDur(t,v,b) { curDur=t; curVal=v; document.querySelectorAll('.dur-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); }
+
+    function init() {
+        rendererSub = new VF.Renderer(document.getElementById('subject-view'), VF.Renderer.Backends.SVG);
+        rendererSub.resize(1500, 180); ctxSub = rendererSub.getContext();
+        calibrateAndDraw();
+    }
+
+    function calibrateAndDraw() {
+        ctxSub.clear(); ctxSub.rect(0,0,1500,180,{fill:'#fdfdfd'});
+        const totalBeats = subject.reduce((a,b)=>a+b.val, 0);
+        const measures = Math.max(4, Math.ceil(totalBeats / 4) + 1);
+        document.getElementById('score-info').innerText = `${Math.ceil(totalBeats/4)}nd Measure | 4/4 Time`;
+        
+        const mWidth = 250;
+        let x = 10;
+        let calibStave = null;
+
+        for(let m=0; m<measures; m++) {
+            const stave = new VF.Stave(x, 40, mWidth);
+            if(m===0) { stave.addClef("treble").addTimeSignature("4/4"); calibStave = stave; }
+            stave.setContext(ctxSub).draw();
+
+            const mNotes = subject.filter(n=>n.offset >= m*4 && n.offset < (m+1)*4);
+            if(mNotes.length > 0) {
+                const sn = mNotes.map(n=>new VF.StaveNote({keys:[n.key], duration:n.type}));
+                const voice = new VF.Voice({num_beats:4, beat_value:4}).setStrict(false).addTickables(sn);
+                new VF.Formatter().joinVoices([voice]).formatToStave([voice], stave);
+                voice.draw(ctxSub, stave); VF.Beam.generateBeams(sn).forEach(b=>b.setContext(ctxSub).draw());
+            }
+            x += mWidth;
+        }
+
+        if(calibStave) {
+            const keys = [{k:'f/5',l:0},{k:'e/5',l:0.5},{k:'d/5',l:1},{k:'c/5',l:1.5},{k:'b/4',l:2},{k:'a/4',l:2.5},{k:'g/4',l:3},{k:'f/4',l:3.5},{k:'e/4',l:4},{k:'d/4',l:4.5},{k:'c/4',l:5},{k:'b/3',l:5.5},{k:'a/3',l:6}];
+            dynamicMap = keys.map(o=>({y:calibStave.getYForLine(o.l), key:o.k, name:o.k.toUpperCase().replace('/','')}));
+        }
+    }
+
+    const subView = document.getElementById('subject-view');
+    const ghost = document.getElementById('ghost-pointer');
+    const label = document.getElementById('ghost-label');
+
+    subView.onmousemove = (e) => {
+        const r = subView.getBoundingClientRect();
+        const y = e.clientY - r.top; const x = e.clientX - r.left + subView.scrollLeft;
+        let best = dynamicMap[0]; let min = 999;
+        dynamicMap.forEach(p => { const d = Math.abs(y-p.y); if(d<min){min=d; best=p;} });
+        currentGhost = best;
+        ghost.style.display='block'; ghost.style.left=x+'px'; ghost.style.top=best.y+'px';
+        label.style.display='block'; label.style.left=x+'px'; label.style.top=best.y+'px'; label.innerText=best.name;
+    };
+    subView.onmouseleave=()=>{ghost.style.display='none'; label.style.display='none';};
+    subView.onclick=()=>{if(!currentGhost)return; subject.push({key:currentGhost.key, type:curDur, val:curVal, offset:subject.reduce((a,b)=>a+b.val,0)}); calibrateAndDraw(); Tone.start(); new Tone.Synth().toDestination().triggerAttackRelease(Tone.Frequency(keyMap[currentGhost.key],"midi"),"16n");};
+
+    function reset(){subject=[]; calibrateAndDraw(); document.getElementById('full-score-card').style.display='none';}
+
+    async function composeAndPlay() {
+        if(subject.length===0) return;
+        document.getElementById('status').innerText = "Constructing Fugue...";
+        const notes = subject.map(n=>({pitch:keyMap[n.key], duration:n.val, offset:n.offset}));
+        try {
+            const r = await fetch('http://127.0.0.1:8000/compose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes})});
+            const d = await r.json(); drawFull(d); playFull(d);
+        } catch(e) { document.getElementById('status').innerText="Error"; }
+    }
+
+    function drawFull(data) {
+        const v = document.getElementById('full-score-view');
+        document.getElementById('full-score-card').style.display='block';
+        v.innerHTML=''; const rf = new VF.Renderer(v, VF.Renderer.Backends.SVG);
+        const w = (data.duration_total / 4) * 350 + 850;
+        rf.resize(w, 320); const cf = rf.getContext(); cf.rect(0,0,w,320,{fill:'#fdfdfd'});
+        window.noteXMap = []; const ms = Math.ceil(data.duration_total / 4);
+        let cx = 20;
+        for(let m=0; m<ms; m++) {
+            const s1=new VF.Stave(cx,50,350); const s2=new VF.Stave(cx,170,350);
+            if(m===0){ s1.addClef("treble").addTimeSignature("4/4"); s2.addClef("treble").addTimeSignature("4/4"); }
+            s1.setContext(cf).draw(); s2.setContext(cf).draw();
+            [[data.part1, s1],[data.part2, s2]].forEach(([part, st]) => {
+                const ns = part.filter(n=>n.offset >= m*4 && n.offset < (m+1)*4);
+                if(ns.length>0) {
+                    const sn = ns.map(n=>new VF.StaveNote({keys:[midiToKey(n.pitch)], duration: valToType(n.duration)}));
+                    const voice = new VF.Voice({num_beats:4, beat_value:4}).setStrict(false).addTickables(sn);
+                    new VF.Formatter().joinVoices([voice]).formatToStave([voice], st);
+                    voice.draw(cf, st); VF.Beam.generateBeams(sn).forEach(b=>b.setContext(cf).draw());
+                    if(st===s1) sn.forEach((note, i) => window.noteXMap.push({beat: ns[i].offset, x: note.getAbsoluteX()}));
+                }
+            });
+            cx += 350;
+        }
+        window.noteXMap.push({beat:data.duration_total, x:cx});
+    }
+
+    function midiToKey(m){return Object.keys(keyMap).find(k=>keyMap[k]===m)||'c/4';}
+    function valToType(v){return v===1.0?'q':v===0.5?'8':'16';}
+
+    function playFull(data) {
+        const spb = 60/100; const now = Tone.now() + 0.3;
+        const head = document.getElementById('playhead-fixed');
+        const view = document.getElementById('full-score-view');
+        head.style.display='block';
+        data.part1.forEach(n=>synth.triggerAttackRelease(Tone.Frequency(n.pitch,"midi"), n.duration*spb*0.9, now+n.offset*spb));
+        data.part2.forEach(n=>synth.triggerAttackRelease(Tone.Frequency(n.pitch,"midi"), n.duration*spb*0.9, now+n.offset*spb));
+        const st = Date.now();
+        const iv = setInterval(() => {
+            const el = (Date.now()-st-300)/1000; if(el<0)return;
+            const b = el/spb; let tx=20;
+            for(let i=0; i<window.noteXMap.length-1; i++) {
+                if(b >= window.noteXMap[i].beat && b <= window.noteXMap[i+1].beat) {
+                    const r = (b-window.noteXMap[i].beat)/(window.noteXMap[i+1].beat-window.noteXMap[i].beat);
+                    tx = window.noteXMap[i].x + r*(window.noteXMap[i+1].x-window.noteXMap[i].x);
+                    break;
+                }
+            }
+            view.scrollLeft = tx - 180;
+            if(el > data.duration_total*spb){clearInterval(iv); head.style.display='none'; document.getElementById('status').innerText="Composition Finished.";}
+        },16);
+    }
+    init();
+</script>
+</body>
+</html>

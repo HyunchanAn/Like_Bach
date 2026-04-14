@@ -1,0 +1,19 @@
+BPGE (Bach-Style Polyphony Generative Engine) Architecture Notes
+
+1. 데이터 전략
+- 핵심 타겟: Bach Two-part Inventions (BWV 772-786)
+- 포맷: MusicXML -> Tokenized Sequence (Part-aware)
+- 성부 구분: 각 노트에 [VOICE_1], [VOICE_2] 등 전용 태그를 붙여 다성부 독립성 보존.
+
+2. 모델 전략
+- 프레임워크: MLX (Apple Silicon 최적화)
+- 모델 타입: Decoder-only Transformer
+- 성부 확장성: 토큰 임베딩 레이어에 Voice ID를 추가하거나, 특수 토큰을 통해 성부 변경을 명시.
+
+3. 대위법 규칙 엔진
+- Music21의 stream.analyze('counterpoint') 및 custom rule-checker 연동 예정.
+- 병행 5도, 8도 및 부적절한 불협화음 해결 검증 모듈 필수.
+
+4. 향후 확장 (RTX 5080)
+- PyTorch 및 FlashAttention 활성화.
+- 1B 이상의 파라미터 모델을 사용하여 더욱 긴 컨텍스트(푸가 전체 구조) 학습.
