@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Data
+data/raw/
+data/processed/bach_model.pt
+data/processed/bach_tokens.pkl
+data/processed/tokenizer.pkl
+
+# Tools
+.vscode/
+.idea/

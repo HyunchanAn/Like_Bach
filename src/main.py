@@ -1,12 +1,33 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 import uvicorn
+import os
+import sys
+
+# Ensure project root is in path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+# Correctly import models for pickle deserialization
+from src.models import BachTokenizer, BachTransformer
 from src.engine import FugueEngine
 
-app = FastAPI(title="BPGE Backend")
+app = FastAPI(title="BPGE Backend - Neural Hybrid v3.0")
 engine = FugueEngine()
+neural_engine = None
+
+# Neural Engine 초기화 시도
+try:
+    from src.neural_engine import NeuralBachEngine
+    model_path = os.path.join('data', 'processed', 'bach_model.pt')
+    if os.path.exists(model_path):
+        neural_engine = NeuralBachEngine()
+        print(">>> Neural Bach Engine Integrated Successfully. (v3.0 ready)")
+except Exception as e:
+    print(f">>> Neural Engine loading deferred or failed: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,32 +46,36 @@ class SubjectMelody(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "engine": "BPGE"}
-
-@app.post("/analyze_subject")
-def analyze_subject(melody: SubjectMelody):
-    try:
-        data = [n.dict() for n in melody.notes]
-        analysis = engine.analyze_subject(data)
-        answer = engine.generate_tonal_answer(analysis['stream'], analysis['key'])
-        
-        answer_notes = []
-        for n in answer.recurse().notes:
-            answer_notes.append({"pitch": n.pitch.midi, "duration": n.duration.quarterLength, "offset": n.offset})
-            
-        return {"key": str(analysis['key']), "answer_notes": answer_notes, "is_tonal": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    mode = "Neural + Rule-based" if neural_engine else "Rule-based only"
+    return {"status": "online", "engine": "BPGE v3.0", "mode": mode}
 
 @app.post("/compose")
 def compose_piece(melody: SubjectMelody):
     """
     주제를 입력받아 전체 2성부 곡을 작곡합니다.
+    우선 Neural Engine 시도 후, 실패 시 Rule-based Engine으로 폴백합니다.
     """
     if not melody.notes:
         raise HTTPException(status_code=400, detail="No notes provided")
+    
+    notes_dict = [n.dict() for n in melody.notes]
+    
+    # 1. Neural Generation 시도 (v3.0 신기능)
+    if neural_engine:
+        try:
+            print(">>> Attempting neural generation for high-quality harmony...")
+            neural_resp = neural_engine.generate_response(notes_dict)
+            if neural_resp:
+                # 신경망 생성 결과를 규칙 기반 엔진의 전체 곡 구성 로직과 결합
+                result = engine.assemble_hybrid_score(notes_dict, neural_resp)
+                result["mode"] = "Neural Hybrid v3.0"
+                return result 
+        except Exception as e:
+            print(f">>> Neural generation failed, falling back to rule-based: {e}")
+
+    # 2. Rule-based Fallback (v2.6 기반)
     try:
-        result = engine.compose_full_piece([n.dict() for n in melody.notes])
+        result = engine.compose_full_piece(notes_dict)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

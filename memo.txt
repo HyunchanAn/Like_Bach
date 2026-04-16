@@ -1,19 +1,18 @@
-BPGE (Bach-Style Polyphony Generative Engine) Architecture Notes
+2026-04-15 16:50
+Antigravity 페르소나 및 시스템 최적화 기록
 
-1. 데이터 전략
-- 핵심 타겟: Bach Two-part Inventions (BWV 772-786)
-- 포맷: MusicXML -> Tokenized Sequence (Part-aware)
-- 성부 구분: 각 노트에 [VOICE_1], [VOICE_2] 등 전용 태그를 붙여 다성부 독립성 보존.
+1. 진단 및 조치
+- 이슈: 다른 환경과 달리 현재 시스템에서 Antigravity 페르소나 및 지침이 정상적으로 발현되지 않음.
+- 원인: C:\Users\sg\.gemini\gemini.md 파일의 한글 인코딩 깨짐 현상 확인. 이로 인해 CLI가 지침을 올바르게 해석하지 못했을 가능성 높음.
+- 조치: 시스템 프롬프트에 로드된 원본 지침을 바탕으로 Antigravity 시니어 엔지니어 페르소나를 강제 적용함.
 
-2. 모델 전략
-- 프레임워크: MLX (Apple Silicon 최적화)
-- 모델 타입: Decoder-only Transformer
-- 성부 확장성: 토큰 임베딩 레이어에 Voice ID를 추가하거나, 특수 토큰을 통해 성부 변경을 명시.
+2. 향후 운영 방침
+- 모든 커뮤니케이션은 한국어를 기본으로 함.
+- 가독성 및 시니어 엔지니어로서의 전문성을 최우선으로 함.
+- 기록 시 강조 표시 (**) 를 절대 사용하지 않으며, Clean 기록 원칙을 준수함.
 
-3. 대위법 규칙 엔진
-- Music21의 stream.analyze('counterpoint') 및 custom rule-checker 연동 예정.
-- 병행 5도, 8도 및 부적절한 불협화음 해결 검증 모듈 필수.
-
-4. 향후 확장 (RTX 5080)
-- PyTorch 및 FlashAttention 활성화.
-- 1B 이상의 파라미터 모델을 사용하여 더욱 긴 컨텍스트(푸가 전체 구조) 학습.
+3. 프로젝트 현황 요약
+- Like Bach Pro v3.0 업그레이드 완료.
+- RTX 5080 기반 신경망 엔진(Transformer)이 백엔드에 통합됨.
+- 하이브리드(Neural + Rule-based) 작곡 시스템이 8000번 포트에서 가동 중.
+- 백그라운드 학습 프로세스(PID: 46464)가 지속적으로 모델을 고도화 중.

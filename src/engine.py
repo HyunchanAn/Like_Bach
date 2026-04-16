@@ -57,6 +57,33 @@ class FugueEngine:
             cs.insert(n.offset, cs_note)
         return cs
 
+    def assemble_hybrid_score(self, subject_notes: List[Dict], neural_resp: List[Dict]) -> Dict:
+        """
+        신경망이 생성한 대위선율(VOICE 2)을 입력된 주제(VOICE 1)와 결합하여 2성부 곡을 구성합니다.
+        """
+        # 기본 분석 (조성 등)
+        analysis = self.analyze_subject(subject_notes)
+        key = analysis['key']
+        
+        # Part 1: Original Subject
+        part1 = subject_notes
+        
+        # Part 2: Neural Response
+        # 신경망 결과에 오프셋 보정이 필요할 수 있으나, 우선 그대로 사용
+        part2 = neural_resp
+        
+        # 전체 길이 계산
+        max_t1 = max([n['offset'] + n['duration'] for n in part1]) if part1 else 0
+        max_t2 = max([n['offset'] + n['duration'] for n in part2]) if part2 else 0
+        total_len = max(max_t1, max_t2)
+
+        return {
+            "key": str(key),
+            "part1": part1,
+            "part2": part2,
+            "duration_total": total_len
+        }
+
     def compose_full_piece(self, notes_data: List[Dict]) -> Dict:
         analysis = self.analyze_subject(notes_data)
         subject = analysis['stream']

@@ -1,0 +1,97 @@
+import os
+import sys
+# Project root 추가
+sys.path.append(os.getcwd())
+import pickle
+import torch
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+from src.models import BachTransformer, BachTokenizer, BLOCK_SIZE, N_EMBD, N_HEAD, N_LAYER
+
+# --- Configuration for RTX 5080 (16GB VRAM) ---
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+BATCH_SIZE = 32
+LEARNING_RATE = 3e-4
+MAX_ITERS = 10000
+EVAL_INTERVAL = 100
+
+# --- Dataset ---
+class BachDataset(Dataset):
+    def __init__(self, data_path, block_size):
+        with open(data_path, 'rb') as f:
+            sequences = pickle.load(f)
+        
+        self.tokenizer = BachTokenizer(sequences)
+        self.encoded_data = []
+        for seq in sequences:
+            encoded = [self.tokenizer.stoi["[SOS]"]] + self.tokenizer.encode(seq) + [self.tokenizer.stoi["[EOS]"]]
+            self.encoded_data.append(torch.tensor(encoded, dtype=torch.long))
+        
+        self.block_size = block_size
+
+    def __len__(self):
+        return len(self.encoded_data)
+
+    def __getitem__(self, idx):
+        data = self.encoded_data[idx]
+        if len(data) <= self.block_size:
+            x = torch.full((self.block_size,), self.tokenizer.stoi["[PAD]"], dtype=torch.long)
+            y = torch.full((self.block_size,), self.tokenizer.stoi["[PAD]"], dtype=torch.long)
+            x[:len(data)-1] = data[:-1]
+            y[:len(data)-1] = data[1:]
+        else:
+            start = torch.randint(0, len(data) - self.block_size, (1,)).item()
+            x = data[start:start+self.block_size]
+            y = data[start+1:start+self.block_size+1]
+        return x, y
+
+# --- Training Loop ---
+if __name__ == "__main__":
+    data_path = 'data/processed/bach_tokens.pkl'
+    dataset = BachDataset(data_path, BLOCK_SIZE)
+    vocab_size = dataset.tokenizer.vocab_size
+    print(f"Vocab size: {vocab_size}, Samples: {len(dataset)}")
+    
+    m = BachTransformer(vocab_size, device=DEVICE, ignore_index=dataset.tokenizer.stoi["[PAD]"]).to(DEVICE)
+    
+    # --- Resume Logic ---
+    model_save_path = 'data/processed/bach_model.pt'
+    if os.path.exists(model_save_path):
+        print(f"Loading existing model from {model_save_path} for resumption...")
+        try:
+            m.load_state_dict(torch.load(model_save_path, map_location=DEVICE))
+        except Exception as e:
+            print(f"Could not load checkpoint: {e}. Starting from scratch.")
+
+    with open('data/processed/tokenizer.pkl', 'wb') as f:
+        pickle.dump(dataset.tokenizer, f)
+
+    optimizer = torch.optim.AdamW(m.parameters(), lr=LEARNING_RATE)
+
+    def get_batch_loader(loader):
+        while True:
+            for x, y in loader:
+                yield x, y
+
+    train_loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    batch_gen = get_batch_loader(train_loader)
+    
+    print(f"Starting training on {DEVICE}...")
+    for step in range(MAX_ITERS):
+        x, y = next(batch_gen)
+        x, y = x.to(DEVICE), y.to(DEVICE)
+        
+        logits, loss = m(x, y)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        
+        if step % 10 == 0:
+            print(f"step {step}: loss {loss.item():.4f}")
+            
+        if step % EVAL_INTERVAL == 0:
+            torch.save(m.state_dict(), 'data/processed/bach_model.pt')
+            print(f"Model saved at step {step}")
+
+    torch.save(m.state_dict(), 'data/processed/bach_model.pt')
+    print("Training Complete. Final model saved.")
