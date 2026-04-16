@@ -1,12 +1,12 @@
 import os
 import sys
-# Project root 추가
+# Project root 異붽?
 sys.path.append(os.getcwd())
 import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from src.models import BachTransformer, BachTokenizer, BLOCK_SIZE, N_EMBD, N_HEAD, N_LAYER
+from src.v3.models import BachTransformer, BachTokenizer, BLOCK_SIZE, N_EMBD, N_HEAD, N_LAYER
 
 # --- Configuration for RTX 5080 (16GB VRAM) ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -47,7 +47,7 @@ class BachDataset(Dataset):
 
 # --- Training Loop ---
 if __name__ == "__main__":
-    data_path = 'data/processed/bach_tokens.pkl'
+    data_path = 'data/processed/v3/bach_tokens.pkl'
     dataset = BachDataset(data_path, BLOCK_SIZE)
     vocab_size = dataset.tokenizer.vocab_size
     print(f"Vocab size: {vocab_size}, Samples: {len(dataset)}")
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     m = BachTransformer(vocab_size, device=DEVICE, ignore_index=dataset.tokenizer.stoi["[PAD]"]).to(DEVICE)
     
     # --- Resume Logic ---
-    model_save_path = 'data/processed/bach_model.pt'
+    model_save_path = 'data/processed/v3/bach_model.pt'
     if os.path.exists(model_save_path):
         print(f"Loading existing model from {model_save_path} for resumption...")
         try:
@@ -63,7 +63,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Could not load checkpoint: {e}. Starting from scratch.")
 
-    with open('data/processed/tokenizer.pkl', 'wb') as f:
+    with open('data/processed/v3/tokenizer.pkl', 'wb') as f:
         pickle.dump(dataset.tokenizer, f)
 
     optimizer = torch.optim.AdamW(m.parameters(), lr=LEARNING_RATE)
@@ -90,8 +90,8 @@ if __name__ == "__main__":
             print(f"step {step}: loss {loss.item():.4f}")
             
         if step % EVAL_INTERVAL == 0:
-            torch.save(m.state_dict(), 'data/processed/bach_model.pt')
+            torch.save(m.state_dict(), 'data/processed/v3/bach_model.pt')
             print(f"Model saved at step {step}")
 
-    torch.save(m.state_dict(), 'data/processed/bach_model.pt')
+    torch.save(m.state_dict(), 'data/processed/v3/bach_model.pt')
     print("Training Complete. Final model saved.")

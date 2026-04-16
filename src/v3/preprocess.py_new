@@ -1,4 +1,4 @@
-import os
+﻿import os
 import pickle
 from music21 import converter, note, chord, stream, interval
 from tqdm import tqdm
@@ -7,15 +7,15 @@ import itertools
 
 def tokenize_piece(file_path):
     """
-    MusicXML 파일을 조성 기반 시간 교차형(Time-Interleaved) 토큰으로 변환합니다.
-    형식: [KEY_X] [TIME_O] [V1] P_ D_ [V2] P_ D_ ...
+    MusicXML ?뚯씪??議곗꽦 湲곕컲 ?쒓컙 援먯감??Time-Interleaved) ?좏겙?쇰줈 蹂?섑빀?덈떎.
+    ?뺤떇: [KEY_X] [TIME_O] [V1] P_ D_ [V2] P_ D_ ...
     """
     try:
         score = converter.parse(file_path)
     except Exception as e:
         return None
 
-    # 1. 조성 분석
+    # 1. 議곗꽦 遺꾩꽍
     try:
         source_key = score.analyze('key')
     except:
@@ -23,28 +23,28 @@ def tokenize_piece(file_path):
 
     all_sequences = []
     
-    # 2. 데이터 증강 (12개 조)
+    # 2. ?곗씠??利앷컯 (12媛?議?
     for i in range(-6, 6):
         transposed_score = score.transpose(interval.Interval(i))
         current_key = source_key.transpose(interval.Interval(i))
         key_token = f"[KEY_{current_key.tonic.name}{'m' if current_key.mode == 'minor' else ''}]"
         
-        # 성부 추출 (최대 4성부 가정)
+        # ?깅? 異붿텧 (理쒕? 4?깅? 媛??
         parts = transposed_score.parts
         if not parts:
             parts = [transposed_score]
             
-        # 4성부 이상의 경우, 사용자 피드백 반영하여 성부 쌍(Pair) 추출
+        # 4?깅? ?댁긽??寃쎌슦, ?ъ슜???쇰뱶諛?諛섏쁺?섏뿬 ?깅? ??Pair) 異붿텧
         if len(parts) >= 2:
-            # 가능한 모든 2성부 조합 (SA, SB, TB 등)
+            # 媛?ν븳 紐⑤뱺 2?깅? 議고빀 (SA, SB, TB ??
             combos = list(itertools.combinations(range(len(parts)), 2))
-            # 너무 많으면 일부만 선택 (최대 3개 쌍: 바깥 성부 및 주요 성부)
+            # ?덈Т 留롮쑝硫??쇰?留??좏깮 (理쒕? 3媛??? 諛붽묑 ?깅? 諛?二쇱슂 ?깅?)
             if len(combos) > 3:
-                combos = [combos[0], combos[-1], (0, len(parts)-1)] # Sop-Alt, Ten-Bas, Sop-Bas 등 (인덱스 추정)
+                combos = [combos[0], combos[-1], (0, len(parts)-1)] # Sop-Alt, Ten-Bas, Sop-Bas ??(?몃뜳??異붿젙)
             
             for p1_idx, p2_idx in combos:
                 seq = [key_token]
-                # 시간순 정렬을 위한 딕셔너리 {offset: {v1: note, v2: note}}
+                # ?쒓컙???뺣젹???꾪븳 ?뺤뀛?덈━ {offset: {v1: note, v2: note}}
                 time_map = {}
                 
                 # Part 1
@@ -58,7 +58,7 @@ def tokenize_piece(file_path):
                     if off not in time_map: time_map[off] = {}
                     time_map[off][2] = n
                 
-                # 시간 순서대로 토큰 생성
+                # ?쒓컙 ?쒖꽌?濡??좏겙 ?앹꽦
                 for off in sorted(time_map.keys()):
                     seq.append(f"[TIME_{off}]")
                     entries = time_map[off]
@@ -71,10 +71,10 @@ def tokenize_piece(file_path):
                         pitch = n.pitch.midi if hasattr(n, 'pitch') else n.pitches[0].midi
                         seq.append(f"[V2] P{pitch} D{float(n.duration.quarterLength)}")
                 
-                if len(seq) > 5: # 유의미한 길이
+                if len(seq) > 5: # ?좎쓽誘명븳 湲몄씠
                     all_sequences.append(seq)
         else:
-            # 단선율의 경우 (학습 효율은 낮으나 포함)
+            # ?⑥꽑?⑥쓽 寃쎌슦 (?숈뒿 ?⑥쑉? ??쑝???ы븿)
             seq = [key_token]
             for n in parts[0].recurse().notes:
                 pitch = n.pitch.midi if hasattr(n, 'pitch') else n.pitches[0].midi
@@ -86,7 +86,7 @@ def tokenize_piece(file_path):
 
 def preprocess_all(input_dirs, output_file):
     """
-    수집된 바흐 작품들을 조성 기반 시간 교차형 토큰으로 변환하여 저장합니다.
+    ?섏쭛??諛뷀쓲 ?묓뭹?ㅼ쓣 議곗꽦 湲곕컲 ?쒓컙 援먯감???좏겙?쇰줈 蹂?섑븯????ν빀?덈떎.
     """
     all_tokens_dataset = []
     
@@ -102,7 +102,7 @@ def preprocess_all(input_dirs, output_file):
     
     for file_path in tqdm(files_to_process):
         try:
-            # 개별 곡 전처리 (데이터 증강 포함)
+            # 媛쒕퀎 怨??꾩쿂由?(?곗씠??利앷컯 ?ы븿)
             augmented_sequences = tokenize_piece(file_path)
             if augmented_sequences:
                 all_tokens_dataset.extend(augmented_sequences)
@@ -117,7 +117,7 @@ def preprocess_all(input_dirs, output_file):
     print(f"\nSuccess: Total {len(all_tokens_dataset)} sequences (Time-Interleaved) saved to {output_file}")
 
 if __name__ == "__main__":
-    # 신규 데이터 경로 반영
+    # ?좉퇋 ?곗씠??寃쎈줈 諛섏쁺
     raw_dirs = ['data/raw/bach'] 
     processed_file = 'data/processed/bach_tokens.pkl'
     

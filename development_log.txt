@@ -82,3 +82,5 @@ Like Bach v3.1 - Harmonic Re-education (바흐 화성 재교육)
 - 패딩 학습 이슈 해결: ignore_index 설정을 통해 모델이 음악적 패턴에만 집중하도록 교정.
 - 리소스 최적화: RTX 5080 VRAM 경합 문제를 인지하고, 향후 고속 학습을 위한 설정 기반 마련.
 - 현재 상태: Step 0 저장 및 학습 중단 (사용자 요청). 추후 여유 시간에 언제든 고품질 학습 재개 가능.
+[2026-04-16 23:37:15] Harmonic Engine V4.0 (Master Bach) Released. Reached 0.068 Loss with 4-voice interleaving and VRAM-Direct optimization.
+[2026-04-16 23:40:05] Milestone: Harmonic Engine V4.0 Release. Completed 4-voice interleaved training with 0.068 loss. Implemented VRAM-Direct and Vectorized Indexing on RTX 5080. Project bifurcated into Legacy (V3.1) and Master (V4.0).

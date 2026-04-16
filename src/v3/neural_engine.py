@@ -1,10 +1,10 @@
 import torch
 import pickle
 import os
-from src.models import BachTransformer, BachTokenizer, BLOCK_SIZE
+from src.v3.models import BachTransformer, BachTokenizer, BLOCK_SIZE
 
 class NeuralBachEngine:
-    def __init__(self, model_path='data/processed/bach_model.pt', tokenizer_path='data/processed/tokenizer.pkl'):
+    def __init__(self, model_path='data/processed/v3/bach_model.pt', tokenizer_path='data/processed/v3/tokenizer.pkl'):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         # Load tokenizer
@@ -25,10 +25,10 @@ class NeuralBachEngine:
 
     def generate_response(self, subject_notes, max_tokens=1000, temperature=0.8):
         """
-        [NEW] 가이드형 생성(Guided Generation)
-        주제(V1)의 각 시점 뒤에 모델이 대위선율(V2)을 생성하도록 유도합니다.
+        [NEW] 媛?대뱶???앹꽦(Guided Generation)
+        二쇱젣(V1)??媛??쒖젏 ?ㅼ뿉 紐⑤뜽????꾩꽑??V2)???앹꽦?섎룄濡??좊룄?⑸땲??
         """
-        # 1. 조성 분석 (현재는 기본 C Major, 추후 입력값에 따라 매핑)
+        # 1. 議곗꽦 遺꾩꽍 (?꾩옱??湲곕낯 C Major, 異뷀썑 ?낅젰媛믪뿉 ?곕씪 留ㅽ븨)
         # music21 Key -> Vocab Key Mapping (CMaj -> [KEY_C], Am -> [KEY_Am])
         raw_key = "C" # Default
         key_token = f"[KEY_{raw_key}]"
@@ -41,33 +41,32 @@ class NeuralBachEngine:
         
         response_notes = []
         
-        # 주제의 각 노트를 순회하며 대위선율 생성
+        # 二쇱젣??媛??명듃瑜??쒗쉶?섎ŉ ??꾩꽑???앹꽦
         for n in subject_notes:
             off = round(float(n['offset']), 3)
-            # 현재 시점의 주제 토큰 추가
+            # ?꾩옱 ?쒖젏??二쇱젣 ?좏겙 異붽?
             v1_tokens = [f"[TIME_{off}]", f"[V1] P{int(n['pitch'])} D{float(n['duration'])}"]
             
-            # 토큰이 어휘 사전에 있는지 확인 (없으면 패딩 혹은 건너뜀)
+            # ?좏겙???댄쐶 ?ъ쟾???덈뒗吏 ?뺤씤 (?놁쑝硫??⑤뵫 ?뱀? 嫄대꼫?)
             v1_encoded = []
             for t in v1_tokens:
                 if t in self.tokenizer.stoi:
                     v1_encoded.append(self.tokenizer.stoi[t])
                 else:
-                    # TIME_X.X 가 없을 경우 가장 가까운 값 혹은 보간 필요하나 일단 PAD
+                    # TIME_X.X 媛 ?놁쓣 寃쎌슦 媛??媛源뚯슫 媛??뱀? 蹂닿컙 ?꾩슂?섎굹 ?쇰떒 PAD
                     v1_encoded.append(self.tokenizer.stoi["[PAD]"])
 
             v1_idx = torch.tensor([v1_encoded], dtype=torch.long, device=self.device)
             current_idx = torch.cat([current_idx, v1_idx], dim=1)
             
-            # 모델이 [V2]를 생성할 때까지 혹은 최대 토큰까지 생성
-            # 2성부이므로 [V2] P_ D_ 형식을 기대함
-            for _ in range(3): # [V2], P_ D_ 생성 시도
+            # 紐⑤뜽??[V2]瑜??앹꽦???뚭퉴吏 ?뱀? 理쒕? ?좏겙源뚯? ?앹꽦
+            # 2?깅??대?濡?[V2] P_ D_ ?뺤떇??湲곕???            for _ in range(3): # [V2], P_ D_ ?앹꽦 ?쒕룄
                 idx_cond = current_idx[:, -BLOCK_SIZE:]
                 logits, _ = self.model(idx_cond)
                 logits = logits[:, -1, :] / temperature
                 
-                # [PAD], [SOS], [EOS], [V1], [TIME_...] 토큰 제외 (화성 음표 생성을 위해)
-                # logits[:, self.tokenizer.stoi["[PAD]"]] = -1e9 # 필요시 강제 제한
+                # [PAD], [SOS], [EOS], [V1], [TIME_...] ?좏겙 ?쒖쇅 (?붿꽦 ?뚰몴 ?앹꽦???꾪빐)
+                # logits[:, self.tokenizer.stoi["[PAD]"]] = -1e9 # ?꾩슂??媛뺤젣 ?쒗븳
                 
                 probs = torch.softmax(logits, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
@@ -88,7 +87,7 @@ class NeuralBachEngine:
                     except:
                         continue
                 
-                if token.startswith("[TIME_"): # 이미 다음 시간으로 넘어가 버리면 종료
+                if token.startswith("[TIME_"): # ?대? ?ㅼ쓬 ?쒓컙?쇰줈 ?섏뼱媛 踰꾨━硫?醫낅즺
                     break
                         
         return response_notes

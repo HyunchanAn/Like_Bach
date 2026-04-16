@@ -7,9 +7,8 @@ venv/
 
 # Data
 data/raw/
-data/processed/bach_model.pt
-data/processed/bach_tokens.pkl
-data/processed/tokenizer.pkl
+data/processed/**/*.pt
+data/processed/**/*.pkl
 
 # Tools
 .vscode/
