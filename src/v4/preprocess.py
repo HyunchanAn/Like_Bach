@@ -5,21 +5,29 @@ from tqdm import tqdm
 
 import itertools
 
+from music21 import converter, note, chord, stream, interval, roman, key, expressions
+from tqdm import tqdm
+
+import itertools
+
 def tokenize_piece(file_path):
     """
-    MusicXML 파일을 조성 기반 시간 교차형(Time-Interleaved) 토큰으로 변환합니다.
-    형식: [KEY_X] [TIME_O] [V1] P_ D_ [V2] P_ D_ ...
+    MusicXML 파일을 고도화된 시간 교차형(Time-Interleaved) 토큰으로 변환합니다.
+    형식: [KEY_X] [TS_X] [REMAIN_N] [ROMAN_X] [TIME_O] [V1] P_ D_ ... [FERM] [FINAL]
     """
     try:
         score = converter.parse(file_path)
     except Exception as e:
         return None
 
-    # 1. 조성 분석
+    # 1. 조성 및 박자 분석
     try:
         source_key = score.analyze('key')
     except:
-        source_key = music21.key.Key('C') # Fallback
+        source_key = key.Key('C')
+    
+    ts_list = score.recurse().getElementsByClass('TimeSignature')
+    ts_token = f"[TS_{ts_list[0].ratioString}]" if ts_list else "[TS_4/4]"
 
     all_sequences = []
     
@@ -29,29 +37,65 @@ def tokenize_piece(file_path):
         current_key = source_key.transpose(interval.Interval(i))
         key_token = f"[KEY_{current_key.tonic.name}{'m' if current_key.mode == 'minor' else ''}]"
         
-        # 성부 추출 (4성부 코랄 최적화)
         parts = transposed_score.parts
-        if not parts:
-            parts = [transposed_score]
-            
-        # 4성부 마스터 인터리빙 (최대 4성부까지 모두 추출)
+        if not parts: parts = [transposed_score]
         num_voices = min(len(parts), 4)
-        seq = [key_token]
-        time_map = {}
+        
+        # 성부 데이터 수집
+        time_map = {} # offset -> {voice_idx: note_obj}
+        fermata_map = {} # offset -> bool
         
         for v_idx in range(num_voices):
-            voice_num = v_idx + 1 # [V1]~[V4]
-            for n in parts[v_idx].recurse().notes:
-                # 시간 정규화 (Quantization): 소수점 3자리 반올림으로 데이터 노이즈 제거
+            v_num = v_idx + 1
+            for n in transposed_score.parts[v_idx].recurse().notes:
                 off = round(float(n.offset), 3)
                 if off not in time_map: time_map[off] = {}
-                time_map[off][voice_num] = n
+                time_map[off][v_num] = n
+                # 페르마타 확인
+                if any(isinstance(expr, expressions.Fermata) for expr in n.expressions):
+                    fermata_map[off] = True
+
+        # 마디 정보 및 전체 길이 계산
+        # 4/4 박자 기준 마디 수 추정 (더 정밀한 계산은 music21.measure.Measure 사용)
+        sorted_offsets = sorted(time_map.keys())
+        if not sorted_offsets: continue
+        total_length = max(sorted_offsets)
+        total_measures = int(total_length // 4) + 1
         
-        # 시간 순서대로 4성부 인터리빙 토큰 생성
-        for off in sorted(time_map.keys()):
+        seq = [key_token, ts_token]
+        last_measure_idx = -1
+        
+        for off in sorted_offsets:
+            # 3. 마디 카운트다운 (새로운 마디 시작 시 주입)
+            current_measure_idx = int(off // 4)
+            if current_measure_idx > last_measure_idx:
+                remain = max(0, total_measures - current_measure_idx)
+                seq.append(f"[REMAIN_{remain}]")
+                
+                # 4. 화성 분석 (로마자 화성 기호 추출)
+                current_notes = []
+                for v in range(1, 5):
+                    if v in time_map[off]:
+                        n = time_map[off][v]
+                        if n.isNote: current_notes.append(n)
+                        elif n.isChord: current_notes.extend(n.pitches)
+                
+                if current_notes:
+                    try:
+                        c = chord.Chord(current_notes)
+                        rn = roman.romanNumeralFromChord(c, current_key)
+                        seq.append(f"[ROMAN_{rn.figure}]")
+                    except:
+                        pass
+                
+                last_measure_idx = current_measure_idx
+
+            # 5. 시간 및 성부 토큰
             seq.append(f"[TIME_{off}]")
+            if off in fermata_map:
+                seq.append("[FERM]")
+            
             entries = time_map[off]
-            # 각 시점마다 존재하는 성부들을 순서대로 배치
             for v in range(1, 5):
                 if v in entries:
                     n = entries[v]
@@ -59,14 +103,18 @@ def tokenize_piece(file_path):
                     dur = round(float(n.duration.quarterLength), 3)
                     seq.append(f"[V{v}] P{pitch} D{dur}")
         
-        if len(seq) > 10: # 유의미한 길이
+        # 6. 종지 태그
+        seq.append("[FINAL]")
+        seq.append("[EOS]")
+        
+        if len(seq) > 20:
             all_sequences.append(seq)
     
     return all_sequences
 
 def preprocess_all(input_dirs, output_file):
     """
-    수집된 바흐 작품들을 조성 기반 시간 교차형 토큰으로 변환하여 저장합니다.
+    수집된 바흐 작품들을 고도화된 토큰으로 변환하여 저장합니다.
     """
     all_tokens_dataset = []
     
@@ -75,30 +123,27 @@ def preprocess_all(input_dirs, output_file):
         if not os.path.exists(input_dir):
             continue
         for filename in os.listdir(input_dir):
-            if filename.endswith('.xml') or filename.endswith('.mxl'):
+            if filename.endswith('.xml') or filename.endswith('.mxl') or filename.endswith('.krn'):
                 files_to_process.append(os.path.join(input_dir, filename))
                 
-    print(f"Found {len(files_to_process)} pieces. Starting Harmonic Preprocessing (V3.1)...")
+    print(f"Found {len(files_to_process)} pieces. Starting Advanced Harmonic Preprocessing (V4.5)...")
     
     for file_path in tqdm(files_to_process):
         try:
-            # 개별 곡 전처리 (데이터 증강 포함)
             augmented_sequences = tokenize_piece(file_path)
             if augmented_sequences:
                 all_tokens_dataset.extend(augmented_sequences)
         except Exception as e:
-            # print(f"Error processing {file_path}: {e}")
             continue
                 
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'wb') as f:
         pickle.dump(all_tokens_dataset, f)
     
-    print(f"\nSuccess: Total {len(all_tokens_dataset)} sequences (Time-Interleaved) saved to {output_file}")
+    print(f"\nSuccess: Total {len(all_tokens_dataset)} sequences (Advanced) saved to {output_file}")
 
 if __name__ == "__main__":
-    # 신규 데이터 경로 반영
+    # 전체 전처리 실행
     raw_dirs = ['data/raw/bach'] 
-    processed_file = 'data/processed/v4/bach_tokens.pkl'
-    
+    processed_file = 'data/processed/v4/bach_tokens_advanced.pkl'
     preprocess_all(raw_dirs, processed_file)
