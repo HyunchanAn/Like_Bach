@@ -15,6 +15,8 @@ import * as Tone from 'tone';
 import { NWCKeyboardEngine } from './engine/NWCKeyboardEngine';
 import type { ComposerState, NoteData } from './engine/NWCKeyboardEngine';
 import { ScoreRenderer } from './components/ScoreRenderer';
+import './App.css';
+import './index.css';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -26,6 +28,7 @@ const App: React.FC = () => {
     currentTime: 0
   });
 
+  const [targetMeasures, setTargetMeasures] = useState(8);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -47,6 +50,7 @@ const App: React.FC = () => {
       // 음표 입력 또는 피치 조정 시 피드백 사운드
       if (item && synthRef.current) {
         const pitch = typeof item === 'number' ? item : item.pitch;
+        if (pitch === -1) return; // Rests don't play sound
         const freq = Tone.Frequency(pitch, "midi").toFrequency();
         synthRef.current.triggerAttackRelease(freq, "8n");
       }
@@ -79,18 +83,17 @@ const App: React.FC = () => {
     try {
       const response = await axios.post(`${API_BASE_URL}/api/generate`, {
         subject_notes: state.notes.filter(n => n.voice === 1),
-        target_measures: 16,
+        target_measures: targetMeasures,
         temperature: 0.8,
         refine_iters: 3
       });
-
       if (response.data.success) {
         // 기존 소프라노 유지 + 생성된 하성 성부 통합
         const aiNotes: NoteData[] = response.data.results.map((n: any) => ({
           id: Math.random().toString(36).substr(2, 9),
           pitch: n.pitch,
           duration: n.duration,
-          durationType: 4, // API에서 durationType 정보는 보완 필요
+          durationType: n.duration === 1.0 ? 4 : (n.duration === 2.0 ? 2 : (n.duration === 4.0 ? 1 : 8)), 
           offset: n.offset,
           voice: n.voice
         }));
@@ -124,7 +127,7 @@ const App: React.FC = () => {
     transport.bpm.value = 80;
 
     state.notes.forEach(note => {
-      const time = note.offset * (60 / transport.bpm.value) * 4; // 대략적인 싱크
+      if (note.pitch === -1) return; // Skip rests in playback
       const freq = Tone.Frequency(note.pitch, "midi").toFrequency();
       
       transport.schedule((t) => {
@@ -147,139 +150,146 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen text-white">
-      {/* Top Header */}
-      <header className="h-16 px-8 flex items-center justify-between border-bottom border-white/10 glass-panel mx-4 mt-4 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-4">
-            <Music className="w-8 h-8 text-primary glow-text" />
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight gradient-text">Like Bach Studio</h1>
-              <p className="text-xs text-white/40 flex items-center gap-2">
-                Premium AI Harmonic Engine v4.5
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="ml-2 p-1 rounded-md hover:bg-white/10 transition-colors inline-flex items-center"
-                  title={isDarkMode ? "Light Mode" : "Dark Mode"}
-                >
-                  {isDarkMode ? <Sun className="w-3 h-3 text-secondary" /> : <Moon className="w-3 h-3 text-slate-700" />}
-                </button>
-              </p>
-            </div>
+    <div className={`studio-root ${!isDarkMode ? 'light-theme' : ''}`}>
+      {/* Header & Toolbar */}
+      <header className="studio-header">
+        <div className="header-left">
+          <div className="brand">
+            <Music size={28} color="var(--accent)" />
+            <h1>Like Bach Studio</h1>
+          </div>
+          
+          <div className="nwc-toolbar">
+            {[1, 2, 4, 8, 16, 32].map((d) => (
+              <button
+                key={d}
+                onClick={() => engineRef.current?.handleKeyDown({ key: d.toString() } as any)}
+                className={`nwc-btn ${state.selectedDuration === d ? 'active' : ''}`}
+                title={`1/${d} Note`}
+              >
+                <span>
+                  {d === 1 ? '𝅝' : d === 2 ? '𝅗𝅥' : d === 4 ? '𝅘𝅥' : d === 8 ? '𝅘𝅥𝅮' : d === 16 ? '𝅘𝅥𝅯' : '𝅘𝅥𝅰'}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-            <CircleDot size={14} className="text-green-400 animate-pulse" />
-            <span className="text-xs font-medium text-white/60">AI Engine Ready</span>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+          <div className="slider-group">
+            <label>Measures</label>
+            <input 
+              type="range" min="4" max="32" step="4" 
+              value={targetMeasures} 
+              onChange={(e) => setTargetMeasures(parseInt(e.target.value))}
+              style={{ width: '120px' }}
+            />
+            <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--accent)', minWidth: '30px', textAlign: 'center' }}>{targetMeasures}</span>
           </div>
-          <button 
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className={`btn-action ${isGenerating ? 'opacity-50' : ''}`}
-          >
-            <Cpu size={18} className={isGenerating ? 'animate-spin' : ''} />
-            {isGenerating ? 'Generating...' : 'AI Compose'}
-          </button>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              onClick={handlePlay}
+              className="nwc-btn"
+              style={{ borderRadius: '16px', background: isPlaying ? '#ef4444' : 'var(--bg-main)', color: isPlaying ? 'white' : 'var(--text-main)', border: '2px solid var(--border)' }}
+            >
+              <CircleDot size={28} />
+            </button>
+            <button 
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="compose-btn"
+            >
+              {isGenerating ? 'PROCESSING...' : 'AI COMPOSE'}
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 workspace-container">
-        {/* Left Sidebar: Controls & Stats */}
-        <aside className="sidebar">
-          <section className="glass-panel p-6 flex-1 flex flex-direction-column gap-6">
-            <div>
-              <h2 className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Keyboard size={16} /> Keyboard Input (NWC Mode)
-              </h2>
-              <ul className="space-y-3 text-sm text-white/70">
-                <li className="flex justify-between items-center bg-white/5 p-2 rounded">
-                  <span>Pitch Adjust</span>
-                  <div className="flex gap-1"><span className="key-label">↑</span><span className="key-label">↓</span></div>
-                </li>
-                <li className="flex justify-between items-center bg-white/5 p-2 rounded">
-                  <span>Enter Note</span>
-                  <span className="key-label">Enter</span>
-                </li>
-                <li className="flex justify-between items-center bg-white/5 p-2 rounded">
-                  <span>Duration Select</span>
-                  <span className="key-label">1-6</span>
-                </li>
-                <li className="flex justify-between items-center bg-white/5 p-2 rounded">
-                  <span>Delete Last</span>
-                  <span className="key-label">Back</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="mt-auto pt-6 border-t border-white/10">
-              <div className="flex items-center gap-4 mb-4">
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                  title={isDarkMode ? "Light Mode" : "Dark Mode"}
-                >
-                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-slate-700" />}
-                </button>
-                <div className="flex items-center gap-2 px-3 py-1 glass-panel text-xs text-secondary animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                  AI Engine Ready
-                </div>
+      <main className="studio-main">
+        {/* Sidebar */}
+        <aside className="studio-sidebar">
+          <div className="sidebar-section">
+            <h2><Keyboard size={20} /> Keybindings</h2>
+            <div className="key-list">
+              <div className="key-row">
+                <span className="key-item-label">Pitch Adjust</span>
+                <span className="key-item-value">Arrows ↑ ↓</span>
               </div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs text-white/40">Current Duration</span>
-                <span className="text-sm font-bold text-violet-400">{1 / state.selectedDuration} Note</span>
+              <div className="key-row">
+                <span className="key-item-label">Insert Note</span>
+                <span className="key-item-value">Enter</span>
               </div>
-              <button onClick={clearScore} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-all border border-white/10">
-                <Eraser size={16} /> Clear Canvas
-              </button>
+              <div className="key-row">
+                <span className="key-item-label">Insert Rest</span>
+                <span className="key-item-value">Space</span>
+              </div>
+              <div className="key-row">
+                <span className="key-item-label">Duration</span>
+                <span className="key-item-value">Key 1 - 6</span>
+              </div>
             </div>
-          </section>
+          </div>
 
-          <section className="glass-panel p-4 h-32 flex items-center justify-center relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-600/20 to-fuchsia-600/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="text-center">
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Total Notes</p>
-              <h3 className="text-3xl font-bold gradient-text">{state.notes.length}</h3>
+          <div className="info-card">
+            <div className="label">Active Note</div>
+            <div className="value">
+              {['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][state.cursorPitch % 12]}
+              <span className="sub-value">{Math.floor(state.cursorPitch / 12) - 1}</span>
             </div>
-          </section>
+          </div>
+
+          <div className="sidebar-section" style={{ marginTop: 'auto' }}>
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="nwc-btn"
+              style={{ width: '100%', fontSize: '15px', fontWeight: '800', gap: '12px', border: '2px solid var(--border)', padding: '0 20px', justifyContent: 'flex-start' }}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />} 
+              {isDarkMode ? 'LIGHT MODE' : 'DARK MODE'}
+            </button>
+            <button 
+              onClick={clearScore}
+              className="nwc-btn"
+              style={{ width: '100%', fontSize: '15px', fontWeight: '800', gap: '12px', border: '2px solid var(--border)', marginTop: '12px', color: '#f87171', padding: '0 20px', justifyContent: 'flex-start' }}
+            >
+              <Eraser size={20} /> RESET PROJECT
+            </button>
+          </div>
         </aside>
 
-        {/* Center: Score Board */}
-        <div className="score-editor">
-          <div className="canvas-area glass-panel">
-            <ScoreRenderer 
-              notes={state.notes} 
-              cursorPitch={state.cursorPitch} 
-              isDarkMode={isDarkMode}
-            />
-            
-            {state.notes.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-                <p className="text-2xl font-light italic">Start composing with keyboard...</p>
-              </div>
-            )}
+        {/* Workspace */}
+        <section className="studio-workspace">
+          <div className="score-container">
+            <div className="score-paper">
+              <ScoreRenderer 
+                notes={state.notes} 
+                cursorPitch={state.cursorPitch} 
+                isDarkMode={isDarkMode}
+                width={1200}
+              />
+            </div>
           </div>
-        </div>
-      </main>
 
-      {/* Footer / Status Bar */}
-      <footer className="status-bar">
-        <div className="flex items-center gap-1">
-          <ChevronRight size={14} className="text-violet-400" />
-          <span>Status: <strong>{isGenerating ? 'AI Generating Harmony...' : 'Ready'}</strong></span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Info size={14} className="text-white/30" />
-          <span>Project: Like Bach v4.5</span>
-        </div>
-        <div className="ml-auto flex gap-4">
-          <span>Tempo: 120 BPM</span>
-          <span>Time: {state.currentTime.toFixed(2)} Beats</span>
-        </div>
-      </footer>
+          {/* Footer inside Workspace */}
+          <footer className="studio-footer">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div className={`status-dot ${isGenerating ? 'status-busy' : 'status-ready'}`}></div>
+                <span style={{ textTransform: 'uppercase' }}>{isGenerating ? 'AI Engine Processing' : 'Engine Ready'}</span>
+              </div>
+              <span style={{ opacity: 0.2 }}>|</span>
+              <span>PROGRESS: {Math.floor(state.currentTime / 4) + 1} / {targetMeasures} MEASURES</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+              <span>TEMPO: 120 BPM</span>
+              <span style={{ opacity: 0.2 }}>|</span>
+              <span style={{ color: 'var(--accent)' }}>LIKE BACH STUDIO v4.6.0</span>
+            </div>
+          </footer>
+        </section>
+      </main>
     </div>
   );
 };

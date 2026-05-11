@@ -139,3 +139,10 @@ eural_engine.py)
 3. ���� �ܰ� ���� (Next Steps: Composition Studio)
 - �ΰ����� '��'�� �ϼ��Ǿ����Ƿ�, �̸� ����ڰ� �����ϰ� ������ �� �ִ� NWC2 ��Ÿ���� �� �۾� ���� ���� ����.
 - Vite + React ����� ������ �������̽��� ���� ���� �غ�.
+
+[2026-05-11 17:35 / Antigravity] Like Bach Studio v4.6.0 배포
+- UI: 가독성 극대화를 위한 대형 폰트 및 그리드 레이아웃 적용
+- Rhythm: ScoreRenderer 내 4/4 박자 강제 교정 및 쉼표 자동 패딩 시스템 구축
+- AI: NeuralBachEngine 0.5 오프셋 정밀 생성 및 24마디 강제 완주 로직 구현
+- SATB: 성부별 기둥 방향(S/T Up, A/B Down) 고정으로 가독성 최적화
+- Bug: 임시표(#) 렌더링 누락 및 서버 비활성 상태 해결

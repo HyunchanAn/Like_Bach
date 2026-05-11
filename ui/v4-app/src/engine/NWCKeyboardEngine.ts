@@ -69,20 +69,26 @@ export class NWCKeyboardEngine {
 
     // 3. 음표 입력 (Enter)
     if (e.key === 'Enter') {
-      this.addNote();
+      this.addNote(false);
     }
 
-    // 4. 삭제 (Backspace)
+    // 4. 쉼표 입력 (Space)
+    if (e.code === 'Space') {
+      e.preventDefault();
+      this.addNote(true);
+    }
+
+    // 5. 삭제 (Backspace)
     if (e.key === 'Backspace') {
       this.removeLastNote();
     }
   }
 
-  private addNote() {
+  private addNote(isRest: boolean = false) {
     const duration = DURATION_MAP[this.state.selectedDuration];
     const newNote: NoteData = {
       id: Math.random().toString(36).substr(2, 9),
-      pitch: this.state.cursorPitch,
+      pitch: isRest ? -1 : this.state.cursorPitch, // -1 represents a rest
       duration: duration,
       durationType: this.state.selectedDuration,
       offset: this.state.currentTime,
@@ -91,7 +97,7 @@ export class NWCKeyboardEngine {
 
     this.state.notes = [...this.state.notes, newNote];
     this.state.currentTime += duration;
-    this.notify();
+    this.notify(isRest ? undefined : this.state.cursorPitch);
   }
 
   private removeLastNote() {
@@ -108,7 +114,11 @@ export class NWCKeyboardEngine {
 
   public setNotes(notes: NoteData[]) {
     this.state.notes = notes;
-    this.state.currentTime = notes.reduce((acc, note) => acc + note.duration, 0);
+    // 모든 성부의 길이를 합산하는 대신, 소프라노(V1)의 마지막 위치를 기준으로 현재 시간을 설정
+    const v1Notes = notes.filter(n => n.voice === 1);
+    this.state.currentTime = v1Notes.length > 0 
+      ? Math.max(...v1Notes.map(n => n.offset + n.duration))
+      : 0;
     this.notify();
   }
 }

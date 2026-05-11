@@ -63,10 +63,10 @@ async def generate_bach(request: GenerationRequest):
         # Pydantic 모델을 dict 리스트로 변환
         notes_dict = [n.dict() for n in request.subject_notes]
         
-        # AI 생성 수행
+        # AI 생성 수행 (target_measures 명시적 전달)
         generated_notes = engine.generate_response(
             subject_notes=notes_dict,
-            target_measures=request.target_measures,
+            target_measures=request.target_measures if request.target_measures > 0 else 8,
             temperature=request.temperature,
             refine_iters=request.refine_iters
         )
@@ -76,6 +76,8 @@ async def generate_bach(request: GenerationRequest):
             "results": generated_notes
         }
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

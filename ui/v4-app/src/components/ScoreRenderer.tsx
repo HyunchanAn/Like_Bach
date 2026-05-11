@@ -1,19 +1,19 @@
 import React, { useEffect, useRef } from 'react';
-import { Renderer, Stave, StaveNote, Voice, Formatter, Beam } from 'vexflow';
+import { Renderer, Stave, StaveNote, Voice, Formatter, StaveConnector, Accidental } from 'vexflow';
 import type { NoteData } from '../engine/NWCKeyboardEngine';
 
 interface ScoreRendererProps {
   notes: NoteData[];
   cursorPitch: number;
-  isDarkMode?: boolean;
+  isDarkMode: boolean;
   width?: number;
 }
 
 export const ScoreRenderer: React.FC<ScoreRendererProps> = ({ 
   notes, 
-  cursorPitch,
-  isDarkMode = true,
-  width = 1200 
+  cursorPitch, 
+  isDarkMode,
+  width = 1400 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -21,47 +21,39 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     if (!containerRef.current) return;
 
     try {
-      // 이전 내용 삭제
       containerRef.current.innerHTML = '';
 
       const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
-      renderer.resize(width, 500);
+      renderer.resize(width, 600);
       const context = renderer.getContext();
       
-      const themeColor = isDarkMode ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.8)';
+      const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
       context.setFillStyle(themeColor);
       context.setStrokeStyle(themeColor);
 
-      // 마디 분할 로직 (4/4 고정)
       const BEATS_PER_MEASURE = 4.0;
       const measures: Record<number, NoteData[]>[] = [];
-      let currentMeasure: Record<number, NoteData[]> = { 1: [], 2: [], 3: [], 4: [] };
-      let currentMeasureBeats = 0;
-
-      // 성부별로 정렬하여 마디 채우기 (단순화된 코랄 레이아웃)
-      // 실제 구현에서는 소프라노(V1)의 오프셋을 기준으로 마디를 나눕니다.
-      const sopranoNotes = notes.filter(n => n.voice === 1).sort((a, b) => a.offset - b.offset);
       
-      let measureIdx = 0;
-      let measureStartOffset = 0;
+      const lastNote = notes.length > 0 ? notes.reduce((max, n) => n.offset + n.duration > max.offset + max.duration ? n : max) : null;
+      const maxMeasureIdx = Math.max(0, Math.floor((lastNote ? lastNote.offset + lastNote.duration - 0.001 : 0) / BEATS_PER_MEASURE));
+      
+      for (let i = 0; i <= maxMeasureIdx; i++) {
+        measures[i] = { 1: [], 2: [], 3: [], 4: [] };
+      }
 
-      // 4성부 전체 노트를 마디별로 배분
       notes.forEach(note => {
         const mIdx = Math.floor(note.offset / BEATS_PER_MEASURE);
-        if (!measures[mIdx]) {
-          measures[mIdx] = { 1: [], 2: [], 3: [], 4: [] };
+        if (measures[mIdx]) {
+          measures[mIdx][note.voice as 1|2|3|4].push(note);
         }
-        measures[mIdx][note.voice as 1|2|3|4].push(note);
       });
 
-      let startX = 40;
-      const yTreble = 50;
-      const yBass = 200;
+      let startX = 100;
+      const yTreble = 80;
+      const yBass = 280;
 
       measures.forEach((measure, idx) => {
-        const measureWidth = idx === 0 ? 300 : 250;
-        
-        // --- 1. 보표(Stave) 생성 ---
+        const measureWidth = idx === 0 ? 450 : 380;
         const trebleStave = new Stave(startX, yTreble, measureWidth);
         const bassStave = new Stave(startX, yBass, measureWidth);
 
@@ -73,85 +65,113 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         trebleStave.setContext(context).draw();
         bassStave.setContext(context).draw();
 
-        // --- 2. 성부별 Voice 및 Notes 생성 ---
-        const createVoice = (voiceNotes: NoteData[], clef: string, stemDirection: number) => {
-          if (voiceNotes.length === 0) {
-            // 빈 마디는 온쉼표로 채움
-            const ghostNote = new StaveNote({ clef, keys: ['b/4'], duration: 'wr' });
-            ghostNote.setStyle({ fillStyle: 'transparent', strokeStyle: 'transparent' });
-            return new Voice({ num_beats: 4, beat_value: 4 }).addTickables([ghostNote]);
-          }
-
-          const vfNotes = voiceNotes.map(n => {
-            const sn = new StaveNote({
-              clef: clef,
-              keys: [pitchToVexKey(n.pitch)],
-              duration: durationToVex(n.durationType),
-              stem_direction: stemDirection
-            });
-            sn.setStyle({ fillStyle: themeColor, strokeStyle: themeColor });
-            return sn;
-          });
-
-          return new Voice({ num_beats: 4, beat_value: 4 }).setStrict(false).addTickables(vfNotes);
-        };
-
-        // Soprano (V1, Treble, Up) / Alto (V2, Treble, Down)
-        const vSoprano = createVoice(measure[1], 'treble', 1);
-        const vAlto = createVoice(measure[2], 'treble', -1);
-        
-        // --- Ghost Cursor (소프라노 레이어에 반투명하게 추가) ---
-        const isLatestMeasure = idx === measures.length - 1;
-        if (isLatestMeasure) {
-          const ghostNote = new StaveNote({
-            clef: 'treble',
-            keys: [pitchToVexKey(cursorPitch)],
-            duration: 'q', // 커서는 기본 4분음표 모양
-            stem_direction: 1
-          });
-          ghostNote.setStyle({ fillStyle: isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)', strokeStyle: 'transparent' });
-          vSoprano.addTickables([ghostNote]);
+        if (idx === 0) {
+          new StaveConnector(trebleStave, bassStave).setType(3).setContext(context).draw();
+          new StaveConnector(trebleStave, bassStave).setType(1).setContext(context).draw();
         }
 
-        // Tenor (V3, Bass, Up) / Bass (V4, Bass, Down)
-        const vTenor = createVoice(measure[3], 'bass', 1);
-        const vBass = createVoice(measure[4], 'bass', -1);
+        const createStrictVoice = (voiceNotes: NoteData[], clef: string, stemDirection: number, isSoprano: boolean = false) => {
+          const vfNotes: StaveNote[] = [];
+          let currentPos = idx * BEATS_PER_MEASURE;
+          const targetEnd = (idx + 1) * BEATS_PER_MEASURE;
 
-        // --- 3. 포매팅 및 그리기 ---
-        const formatter = new Formatter();
-        
-        // 상단 보표 정렬
-        formatter.joinVoices([vSoprano, vAlto]).format([vSoprano, vAlto], measureWidth - 50);
+          const sortedNotes = [...voiceNotes].sort((a, b) => a.offset - b.offset);
+
+          sortedNotes.forEach(n => {
+            if (n.offset > currentPos) {
+              vfNotes.push(...createRests(currentPos, n.offset, clef, stemDirection));
+              currentPos = n.offset;
+            }
+            
+            if (currentPos < targetEnd) {
+              const dur = Math.min(n.duration, targetEnd - currentPos);
+              const isRest = n.pitch === -1;
+              const key = isRest ? (stemDirection === 1 ? 'b/4' : 'd/5') : pitchToVexKey(n.pitch);
+              const sn = new StaveNote({
+                clef,
+                keys: [key],
+                duration: isRest ? `${durationToVex(n.durationType)}r` : durationToVex(n.durationType),
+                stem_direction: stemDirection
+              });
+              sn.setStyle({ fillStyle: themeColor, strokeStyle: themeColor });
+              if (!isRest && key.includes("#")) sn.addModifier(new Accidental("#"));
+              vfNotes.push(sn);
+              currentPos += dur;
+            }
+          });
+
+          if (isSoprano && idx === measures.length - 1) {
+            const cursorNote = new StaveNote({ clef: 'treble', keys: [pitchToVexKey(cursorPitch)], duration: 'q', stem_direction: 1 });
+            cursorNote.setStyle({ fillStyle: '#2dd4bf', strokeStyle: '#2dd4bf' });
+            vfNotes.push(cursorNote);
+            currentPos += 1.0;
+          }
+
+          if (currentPos < targetEnd) {
+            vfNotes.push(...createRests(currentPos, targetEnd, clef, stemDirection));
+          }
+
+          const voice = new Voice({ num_beats: 4, beat_value: 4 }).setStrict(false);
+          return voice.addTickables(vfNotes);
+        };
+
+        const vSoprano = createStrictVoice(measure[1], 'treble', 1, true); // Soprano: Up
+        const vAlto = createStrictVoice(measure[2], 'treble', -1);        // Alto: Down
+        const vTenor = createStrictVoice(measure[3], 'bass', 1);          // Tenor: Up
+        const vBassNote = createStrictVoice(measure[4], 'bass', -1);      // Bass: Down
+
+        new Formatter().joinVoices([vSoprano, vAlto]).format([vSoprano, vAlto], measureWidth - 100);
         vSoprano.draw(context, trebleStave);
         vAlto.draw(context, trebleStave);
 
-        // 하단 보표 정렬
-        new Formatter().joinVoices([vTenor, vBass]).format([vTenor, vBass], measureWidth - 50);
+        new Formatter().joinVoices([vTenor, vBassNote]).format([vTenor, vBassNote], measureWidth - 100);
         vTenor.draw(context, bassStave);
-        vBass.draw(context, bassStave);
+        vBassNote.draw(context, bassStave);
 
         startX += measureWidth;
       });
 
     } catch (error) {
-      console.error('Advanced Render Error:', error);
-      if (containerRef.current) {
-        containerRef.current.innerHTML = `<div style="color: rgba(255,255,255,0.3); padding: 40px;">Layout Syncing... (${error})</div>`;
-      }
+      console.error('Render Error:', error);
     }
-
   }, [notes, cursorPitch, isDarkMode, width]);
 
   return (
-    <div ref={containerRef} className="score-container glass-card p-4 overflow-x-auto min-h-[500px]" />
+    <div className="score-wrapper">
+      <div ref={containerRef} className="score-renderer" />
+    </div>
   );
 };
+
+function createRests(start: number, end: number, clef: string, stemDirection: number): StaveNote[] {
+  const rests: StaveNote[] = [];
+  let remaining = end - start;
+  while (remaining > 0.001) {
+    let dur = 1.0;
+    let type = 'q';
+    if (remaining >= 4.0) { dur = 4.0; type = 'w'; }
+    else if (remaining >= 2.0) { dur = 2.0; type = 'h'; }
+    else if (remaining >= 1.0) { dur = 1.0; type = 'q'; }
+    else if (remaining >= 0.5) { dur = 0.5; type = '8'; }
+    else { dur = remaining; type = '16'; }
+    
+    const r = new StaveNote({ 
+      clef, 
+      keys: [stemDirection === 1 ? 'b/4' : 'd/5'], 
+      duration: type + 'r',
+      stem_direction: stemDirection
+    });
+    r.setStyle({ fillStyle: 'rgba(128,128,128,0.3)', strokeStyle: 'rgba(128,128,128,0.3)' });
+    rests.push(r);
+    remaining -= dur;
+  }
+  return rests;
+}
 
 function pitchToVexKey(pitch: number): string {
   const notes = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
   const octave = Math.floor(pitch / 12) - 1;
-  const name = notes[pitch % 12];
-  return `${name}/${octave}`;
+  return `${notes[pitch % 12]}/${octave}`;
 }
 
 function durationToVex(type: number): string {
