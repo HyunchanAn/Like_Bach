@@ -1,13 +1,10 @@
 # Like Bach: Harmonic Generative Engine v4.5 (Refinement Era)
 
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Music21](https://img.shields.io/badge/Music21-9C27B0?style=for-the-badge&logo=music)
-![Hardware](https://img.shields.io/badge/RTX_5080_/_M2_Pro-Optimized-black?style=for-the-badge&logo=nvidia)
+![Status](https://img.shields.io/badge/Status-v4.5_Release-brightgreen?style=flat-square)
+![Backend](https://img.shields.io/badge/Backend-PyTorch_Transformer-red?style=flat-square)
+![Frontend](https://img.shields.io/badge/Frontend-React_/_Vite-blue?style=flat-square)
+![API](https://img.shields.io/badge/API-FastAPI-005571?style=flat-square)
+![Optimization](https://img.shields.io/badge/Optimization-RTX_5080_/_M2_Pro-orange?style=flat-square)
 
 바흐의 4성부 화성 체계를 완벽히 학습하고, `DeepBach` 및 `BachBot`의 선진 알고리즘을 이식하여 음악적 논리성과 구조적 완결성을 극대화한 통합 작곡 엔진입니다.
 
