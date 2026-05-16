@@ -1,186 +1,42 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;600;700&display=swap');
+
+@theme {
+  --font-sans: 'Outfit', 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  
+  --color-studio-bg: #0f1115;
+  --color-studio-panel: #1a1d23;
+  --color-studio-sidebar: #14161c;
+  --color-studio-accent: #6366f1;
+  --color-studio-border: rgba(255, 255, 255, 0.05);
+}
+
 :root {
-  /* Light Mode (Default) */
-  --bg-color: #ffffff;
-  --panel-bg: rgba(240, 240, 240, 0.9);
-  --glass-bg: rgba(255, 255, 255, 0.8);
-  --border-color: rgba(0, 0, 0, 0.1);
-  --accent-gold: #b8860b;
-  --accent-blue: #0969da;
-  --text-primary: #1f2328;
-  --text-secondary: #656d76;
-  --active-color: #d4a017;
-  --staff-color: #000000;
-  --score-bg: #ffffff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark Mode */
-    --bg-color: #0d1117;
-    --panel-bg: rgba(33, 38, 45, 0.7);
-    --glass-bg: rgba(22, 27, 34, 0.85);
-    --border-color: rgba(255, 255, 255, 0.1);
-    --accent-gold: #d4af37;
-    --accent-blue: #58a6ff;
-    --text-primary: #c9d1d9;
-    --text-secondary: #8b949e;
-    --active-color: #ffcc00;
-    --staff-color: #ffffff;
-    --score-bg: #161b22;
-  }
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  font-family: 'Outfit', sans-serif;
+  background-color: #0f1115;
+  color: #e2e8f0;
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-primary);
+  margin: 0;
   overflow: hidden;
-  height: 100vh;
 }
 
 #root {
-  display: flex;
-  flex-direction: column;
+  width: 100%;
   height: 100vh;
 }
 
-/* Glassmorphism Effect */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+/* Custom Utilities for NWC Style */
+.nwc-btn {
+  @apply flex items-center justify-center rounded transition-all duration-200;
 }
 
-/* Layout Containers */
-.top-nav {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--border-color);
+.nwc-btn-active {
+  @apply bg-indigo-600/20 text-indigo-400 border border-indigo-500/40;
 }
 
-.toolbar-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  background-color: var(--border-color);
-}
-
-.toolbar {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 8px;
-  background-color: var(--panel-bg);
-}
-
-.toolbar-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  padding: 4px;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.toolbar-btn.active {
-  background: rgba(212, 175, 55, 0.2);
-  color: var(--accent-gold);
-}
-
-.toolbar-separator {
-  width: 1px;
-  height: 20px;
-  background: var(--border-color);
-  margin: 0 4px;
-}
-
-.main-workspace {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  position: relative;
-}
-
-.staff-labels {
-  width: 120px;
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-}
-
-.score-area {
-  flex: 1;
-  overflow: auto;
-  background-color: var(--score-bg);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-
-.status-bar {
-  height: 24px;
-  background: var(--panel-bg);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-/* NWC-style cursor */
-.insertion-cursor {
-  position: absolute;
-  width: 2px;
-  height: 80px;
-  background: var(--accent-gold);
-  z-index: 10;
-  pointer-events: none;
-  box-shadow: 0 0 8px var(--accent-gold);
-}
-
-.rotate {
-  animation: rotate 1.5s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.nwc-btn-hover {
+  @apply hover:bg-white/5 text-slate-500;
 }

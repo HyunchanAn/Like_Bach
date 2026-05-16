@@ -6,3 +6,7 @@ mlx-lm
 huggingface_hub
 numpy
 tqdm
+fastapi
+uvicorn
+pydantic
+python-multipart

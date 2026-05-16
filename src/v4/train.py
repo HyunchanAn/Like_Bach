@@ -44,7 +44,7 @@ class BachDataset(Dataset):
 
 # --- Training Loop ---
 if __name__ == "__main__":
-    data_path = 'data/processed/v4/bach_tokens.pkl'
+    data_path = 'data/processed/v4/bach_tokens_advanced.pkl'
     dataset = BachDataset(data_path, BLOCK_SIZE)
     vocab_size = dataset.tokenizer.vocab_size
     print(f"Vocab size: {vocab_size}, Tokens: {len(dataset.data_tensor)}")
