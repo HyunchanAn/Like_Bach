@@ -13,3 +13,4 @@ data/processed/**/*.pkl
 # Tools
 .vscode/
 .idea/
+scratch/
