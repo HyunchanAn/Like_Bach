@@ -25,7 +25,7 @@ jobs:
         # Exclude mlx and mlx-lm which are macOS-only
         grep -v -E "mlx|mlx-lm" requirements.txt > temp_requirements.txt
         pip install -r temp_requirements.txt
-        pip install pytest ruff
+        pip install pytest ruff httpx
 
     - name: Lint and Format Check with Ruff
       run: |
@@ -50,7 +50,7 @@ jobs:
 
     - name: Install frontend dependencies
       working-directory: ui/v4-app
-      run: npm ci
+      run: npm install
 
     - name: Lint frontend code
       working-directory: ui/v4-app
