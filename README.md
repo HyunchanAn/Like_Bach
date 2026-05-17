@@ -38,6 +38,25 @@
    python src/v4/neural_engine.py
    ```
 
+## Continuous Integration (지속적 통합)
+
+이 프로젝트는 코드 품질 관리 및 협업 시의 안정성 확보를 위해 GitHub Actions 기반의 지속적 통합(CI) 파이프라인을 가동하고 있습니다.
+
+1. 자동화 워크플로우 (GitHub Actions):
+- 트리거 조건: main 브랜치 및 feature/algorithm-enhancement 브랜치로의 push 및 pull_request 발생 시 실행
+- 백엔드 검증 (backend-ci): Python 3.10 환경에서 ruff 정적 분석 도구를 이용한 코드 린팅 검사 및 pytest 기반 단위 테스트 자동 구동
+- 프론트엔드 검증 (frontend-ci): Node.js 20 환경에서 ESLint 정적 분석 검사 및 Vite 프로덕션 빌드 성공 여부를 병렬 수행
+
+2. 단위 테스트 설계 (pytest):
+- tests/test_backend.py 파일에서 백엔드 핵심 규칙 엔진인 FugueEngine의 가동성과 FastAPI 라우팅 구조를 검증합니다.
+- 대용량 가중치나 GPU가 없는 CPU 환경에서도 테스트가 가능하도록 경량 단위 테스트로 최적화되었습니다.
+
+3. 로컬 테스트 및 린팅 구동 방법:
+- 백엔드 린트 검사: python -m ruff check .
+- 백엔드 테스트 구동: python -m pytest
+- 프론트엔드 린트 검사: npm run lint (ui/v4-app 경로)
+- 프론트엔드 빌드 테스트: npm run build (ui/v4-app 경로)
+
 ## Development History
 
 상세한 기술 개발 과정 및 최적화 이력은 development_log.txt에서 확인할 수 있습니다.
