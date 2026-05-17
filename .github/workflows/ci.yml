@@ -2,9 +2,9 @@ name: Like Bach CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/algorithm-enhancement ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, feature/algorithm-enhancement ]
 
 jobs:
   backend-ci:
