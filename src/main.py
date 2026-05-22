@@ -37,23 +37,49 @@ app.add_middleware(
 )
 
 class NoteData(BaseModel):
+    """단일 음표의 물리적 화성학 명세서입니다.
+    
+    Attributes:
+        pitch: 음높이 (MIDI 번호 규격).
+        duration: 지속 시간 (4분음표 1.0 기준).
+        offset: 마디 시작점으로부터의 오프셋 간격.
+    """
     pitch: int
     duration: float
     offset: float
 
 class SubjectMelody(BaseModel):
+    """사용자가 입력한 초기 소프라노 선율 시퀀스 집합입니다.
+    
+    Attributes:
+        notes: 음표 인스턴스 데이터 목록.
+    """
     notes: List[NoteData]
 
 @app.get("/")
-def read_root():
+def read_root() -> Dict[str, str]:
+    """백엔드 작곡 서버의 상태 체크 및 현재 구동 중인 하드웨어 엔진 모드를 반환합니다.
+    
+    Returns:
+        Dict[str, str]: status(온라인 여부), engine(버전 정보), mode(신경망 활성 모드).
+    """
     mode = "Neural + Rule-based" if neural_engine else "Rule-based only"
     return {"status": "online", "engine": "BPGE v3.0", "mode": mode}
 
 @app.post("/compose")
-def compose_piece(melody: SubjectMelody):
-    """
-    주제를 입력받아 전체 2성부 곡을 작곡합니다.
+def compose_piece(melody: SubjectMelody) -> Dict[str, list]:
+    """주제를 입력받아 전체 곡을 작곡합니다.
+    
     우선 Neural Engine 시도 후, 실패 시 Rule-based Engine으로 폴백합니다.
+    
+    Args:
+        melody: 사용자가 입력한 소프라노 선율 데이터 세트.
+        
+    Returns:
+        Dict[str, list]: 각 성부별 음표 리스트 및 조성 분석 정보 메타데이터.
+        
+    Raises:
+        HTTPException: 입력값 누락 시 400 에러, 생성 실패 시 500 내부 에러 발생.
     """
     if not melody.notes:
         raise HTTPException(status_code=400, detail="No notes provided")
@@ -72,7 +98,7 @@ def compose_piece(melody: SubjectMelody):
                 return result 
         except Exception as e:
             print(f">>> Neural generation failed, falling back to rule-based: {e}")
-
+ 
     # 2. Rule-based Fallback (v2.6 기반)
     try:
         result = engine.compose_full_piece(notes_dict)

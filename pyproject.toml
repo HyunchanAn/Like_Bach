@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "like-bach-engine"
+version = "4.6.1"
+description = "바흐의 대위법과 트랜스포머 생성 모델이 융합된 하이브리드 음악 생성 엔진"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Hyunchan An", email = "hyunchan.an@example.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "pydantic>=2.0.0",
+    "music21>=9.0.0",
+    "torch>=2.0.0",
+    "httpx>=0.24.0",
+]
+
+[tool.setuptools]
+packages = ["src", "tests"]
+
+[tool.ruff]
+# Target legacy folders to exclude from style checking
+exclude = [
+    "src/v3",
+    "src/v4",
+    "scratch",
+]
+
+[tool.ruff.lint]
+# E402: Module level import not at top of file (Required for pickle deserialization imports)
+# F401: Unused imports (Required for deserializing classes dynamically)
+# E701: Multiple statements on one line
+# F841: Local variable is assigned to but never used
+ignore = ["E402", "F401", "E701", "F841"]

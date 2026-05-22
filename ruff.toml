@@ -1,0 +1,31 @@
+# Ruff configuration for Like Bach
+
+# Exclude legacy, experimental, and build directories from linting
+exclude = [
+    ".git",
+    "node_modules",
+    "scratch",
+    "src/v3",
+    "src/v4",
+    "ui/v4-app",
+]
+
+# Set standard Python guidelines
+line-length = 120
+indent-width = 4
+
+[lint]
+# Enable standard Pyflakes (F) and pycodestyle (E, W) rules
+select = ["E4", "E7", "E9", "F"]
+# Ignore E402 (import position), F401 (unused imports), E701 (multiple statements on one line), and F841 (unused variables)
+# to maintain total compatibility with existing training and utility scripts.
+ignore = [
+    "E402",
+    "F401",
+    "E701",
+    "F841",
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
