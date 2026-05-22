@@ -88,17 +88,19 @@ const App: React.FC = () => {
         refine_iters: 3
       });
       if (response.data.success) {
-        // 기존 소프라노 유지 + 생성된 하성 성부 통합
-        const aiNotes: NoteData[] = response.data.results.map((n: any) => ({
-          id: Math.random().toString(36).substr(2, 9),
-          pitch: n.pitch,
-          duration: n.duration,
-          durationType: n.duration === 1.0 ? 4 : (n.duration === 2.0 ? 2 : (n.duration === 4.0 ? 1 : 8)), 
-          offset: n.offset,
-          voice: n.voice
-        }));
+        // 소프라노(V1) 중복 방지: AI 응답 중 V1은 제외하고 V2, V3, V4만 가져오기
+        const aiNotes: NoteData[] = response.data.results
+          .filter((n: any) => n.voice !== 1)
+          .map((n: any) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            pitch: n.pitch,
+            duration: n.duration,
+            offset: n.offset,
+            voice: n.voice as 1|2|3|4,
+            durationType: n.duration === 1.0 ? 4 : (n.duration === 2.0 ? 2 : (n.duration === 4.0 ? 1 : 8))
+          }));
         
-        // 소프라노(V1)만 남기고 새로 생성된 결과 합치기
+        // 기존 소프라노 유지 + 생성된 하성 성부 통합
         const newNotes = [...state.notes.filter(n => n.voice === 1), ...aiNotes];
         engineRef.current?.setNotes(newNotes);
       }
@@ -115,6 +117,7 @@ const App: React.FC = () => {
     if (isPlaying) {
       Tone.getTransport().stop();
       Tone.getTransport().cancel();
+      Tone.Draw.cancel();
       setIsPlaying(false);
       return;
     }
@@ -124,25 +127,67 @@ const App: React.FC = () => {
     
     const transport = Tone.getTransport();
     transport.cancel();
-    transport.bpm.value = 80;
+    Tone.Draw.cancel();
+    
+    const currentBpm = 80;
+    transport.bpm.value = currentBpm;
+
+    let scrollRaf: number;
+    const startScroll = () => {
+      const container = document.querySelector('.score-container') as HTMLElement;
+      if (container && transport.state === 'started') {
+        const currentBeat = transport.seconds * (currentBpm / 60);
+        container.scrollLeft = Math.max(0, (currentBeat * 95) - 300);
+        scrollRaf = requestAnimationFrame(startScroll);
+      }
+    };
 
     state.notes.forEach(note => {
       if (note.pitch === -1) return; // Skip rests in playback
       const freq = Tone.Frequency(note.pitch, "midi").toFrequency();
+      const timeInSec = note.offset * (60 / currentBpm);
+      const durInSec = note.duration * (60 / currentBpm);
       
       transport.schedule((t) => {
         synthRef.current?.triggerAttackRelease(freq, note.duration * 0.9, t);
-      }, note.offset); 
+        
+        if (note.id) {
+          Tone.Draw.schedule(() => {
+            const el = document.getElementById(`note-${note.id}`);
+            if (el) {
+              el.querySelectorAll('path').forEach((p: any) => { 
+                p.dataset.origFill = p.style.fill; 
+                p.style.fill = '#ef4444'; 
+                p.style.stroke = '#ef4444'; 
+              });
+            }
+          }, t);
+          
+          Tone.Draw.schedule(() => {
+            const el = document.getElementById(`note-${note.id}`);
+            if (el) {
+              el.querySelectorAll('path').forEach((p: any) => { 
+                p.style.fill = p.dataset.origFill || ''; 
+                p.style.stroke = p.dataset.origFill || ''; 
+              });
+            }
+          }, t + durInSec);
+        }
+      }, timeInSec); 
     });
 
     transport.start();
+    scrollRaf = requestAnimationFrame(startScroll);
     
     // 마지막 노트 종료 시 정지 처리
-    const totalDuration = state.notes.length > 0 ? Math.max(...state.notes.map(n => n.offset + n.duration)) : 0;
+    const totalDurationBeats = state.notes.length > 0 ? Math.max(...state.notes.map(n => n.offset + n.duration)) : 0;
+    const totalDurationSec = (totalDurationBeats * (60 / currentBpm)) + 1;
+    
     transport.schedule(() => {
       setIsPlaying(false);
       transport.stop();
-    }, totalDuration + 1);
+      cancelAnimationFrame(scrollRaf);
+    }, totalDurationSec);
   };
 
   const clearScore = () => {

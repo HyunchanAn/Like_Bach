@@ -40,12 +40,11 @@ class NeuralBachEngine:
             off = round(float(n['offset']), 3)
             subject_map[off] = n
 
-        # 2. 0.5(8분음표) 단위로 정밀 생성 루프 실행
+        # 2. 주제(Soprano)의 실제 오프셋 기반으로 생성 루프 실행 (강제 0.5박 겹침 방지)
         max_offset = target_measures * 4.0
-        current_offset = 0.0
+        sorted_offsets = sorted([off for off in subject_map.keys() if off < max_offset])
         
-        while current_offset < max_offset:
-            off = round(current_offset, 3)
+        for off in sorted_offsets:
             curr_measure = int(off // 4)
             
             # 마디 변경 제어
@@ -57,18 +56,11 @@ class NeuralBachEngine:
             
             current_seq.append(f"[TIME_{off}]")
             
-            # 해당 지점에 주제(V1)가 있으면 그대로 사용, 없으면 생성
-            if off in subject_map:
-                n = subject_map[off]
-                current_seq.append(f"[V1] P{int(n['pitch'])} D{round(float(n['duration']), 3)}")
-                # 하성 3성부만 생성
-                self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V2]", "[V3]", "[V4]"], int(n['pitch']))
-            else:
-                # 4성부 전체 자율 작곡
-                self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]", "[V2]", "[V3]", "[V4]"], 60)
-            
-            # 다음 0.5박 지점으로 이동
-            current_offset += 0.5
+            # 해당 지점에 주제(V1)가 있으면 그대로 사용
+            n = subject_map[off]
+            current_seq.append(f"[V1] P{int(n['pitch'])} D{round(float(n['duration']), 3)}")
+            # 하성 3성부만 해당 오프셋에서 동일 리듬으로 생성
+            self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V2]", "[V3]", "[V4]"], int(n['pitch']))
             
             # 강제 완주: 목표 마디 전에는 절대 멈추지 않음
             if "[FINAL]" in current_seq[-5:] and curr_measure < target_measures - 1:

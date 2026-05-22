@@ -165,3 +165,13 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
   - edge case 테스트 추가: 빈 멜로디 딕셔너리, 무한 재생 루프 방지 로직 등을 property-based test(hypothesis) 구조로 모방하여 강화
 - [ ] 4. Packaging & Releasability
   - pyproject.toml 도입하여 Like Bach 작곡 엔진을 설치 및 배포 가능한 정식 Python 패키지(like-bach-engine) 형태로 구조화
+
+[2026-05-22 18:50 / Antigravity] Like Bach Studio v4.6 핫픽스
+- AI/Harmony: neural_engine.py 렌더링 로직 수정. 강제 0.5박 간격 생성이 아닌, 입력된 주제(Soprano)의 실제 오프셋과 리듬을 바탕으로 생성 루프를 실행하도록 변경하여 음표 겹침 및 불협화음 문제 완벽 해결.
+- UI/Playback: ScoreRenderer.tsx에서 VexFlow 렌더링 시 고유 SVG ID를 부여하고, App.tsx의 Tone.js 스케줄러(Tone.Draw)와 연동하여 재생 위치에 맞춘 가로 횡스크롤 및 빨간색 음표 실시간 하이라이팅 기능 구현.
+- UI/Score: 4성부(Soprano, Alto, Tenor, Bass) 기둥 방향 렌더링 오류 수정. VexFlow `stem_direction` 생성자 옵션이 무시되는 버그를 발견하여 `.setStemDirection()` 메서드를 명시적으로 호출하도록 강제 적용 완료 (소프라노/테너는 윗방향, 알토/베이스는 아랫방향).
+
+[2026-05-22 22:55 / Antigravity] 모델 재학습 완료 및 서버 재시작
+- AI/Harmony: 전처리 코드 오류 수정(recurse() -> flatten()을 통한 Global Offset 추출) 후 데이터 전처리 재수행 완료.
+- 모델 학습: 깨끗한 수평적/수직적 화성 맥락을 담은 올바른 데이터셋으로 10,000 Step 재학습 완료. 최종 Loss는 약 0.0876 수준으로 수렴하며 바흐 코랄 특유의 정상적인 화성 진행 규칙을 성공적으로 학습함.
+- Backend: 최신 가중치(weights)를 로드하기 위해 백엔드 API 서버 재가동. (프론트엔드/백엔드 모두 정상 운영 중)

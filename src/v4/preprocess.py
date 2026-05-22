@@ -47,7 +47,7 @@ def tokenize_piece(file_path):
         
         for v_idx in range(num_voices):
             v_num = v_idx + 1
-            for n in transposed_score.parts[v_idx].recurse().notes:
+            for n in transposed_score.parts[v_idx].flatten().notes:
                 off = round(float(n.offset), 3)
                 if off not in time_map: time_map[off] = {}
                 time_map[off][v_num] = n

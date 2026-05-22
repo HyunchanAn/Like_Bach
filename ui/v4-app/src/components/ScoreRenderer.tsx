@@ -90,11 +90,19 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
               const sn = new StaveNote({
                 clef,
                 keys: [key],
-                duration: isRest ? `${durationToVex(n.durationType)}r` : durationToVex(n.durationType),
-                stem_direction: stemDirection
+                duration: isRest ? `${durationToVex(n.durationType)}r` : durationToVex(n.durationType)
               });
+              
+              // 명시적으로 기둥 방향 강제 적용
+              sn.setStemDirection(stemDirection);
+              
               sn.setStyle({ fillStyle: themeColor, strokeStyle: themeColor });
               if (!isRest && key.includes("#")) sn.addModifier(new Accidental("#"));
+              
+              if (n.id) {
+                sn.setAttribute('id', `note-${n.id}`);
+              }
+              
               vfNotes.push(sn);
               currentPos += dur;
             }
@@ -158,9 +166,9 @@ function createRests(start: number, end: number, clef: string, stemDirection: nu
     const r = new StaveNote({ 
       clef, 
       keys: [stemDirection === 1 ? 'b/4' : 'd/5'], 
-      duration: type + 'r',
-      stem_direction: stemDirection
+      duration: type + 'r'
     });
+    r.setStemDirection(stemDirection);
     r.setStyle({ fillStyle: 'rgba(128,128,128,0.3)', strokeStyle: 'rgba(128,128,128,0.3)' });
     rests.push(r);
     remaining -= dur;
