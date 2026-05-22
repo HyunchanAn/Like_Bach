@@ -87,11 +87,11 @@ const App: React.FC = () => {
         temperature: 0.8,
         refine_iters: 3
       });
-      if (response.data.success) {
-        // 소프라노(V1) 중복 방지: AI 응답 중 V1은 제외하고 V2, V3, V4만 가져오기
-        const aiNotes: NoteData[] = response.data.results
-          .filter((n: any) => n.voice !== 1)
-          .map((n: any) => ({
+        if (response.data.success) {
+          // AI 엔진은 사용자의 초기 입력(Soprano)을 포함하여 
+          // 곡 전체(Soprano, Alto, Tenor, Bass)를 토큰 시퀀스로부터 디코딩해 반환합니다.
+          // 따라서 voice === 1을 필터링할 필요 없이 반환받은 전체 노트를 그대로 사용합니다.
+          const aiNotes: NoteData[] = response.data.results.map((n: any) => ({
             id: Math.random().toString(36).substr(2, 9),
             pitch: n.pitch,
             duration: n.duration,
@@ -99,11 +99,10 @@ const App: React.FC = () => {
             voice: n.voice as 1|2|3|4,
             durationType: n.duration === 1.0 ? 4 : (n.duration === 2.0 ? 2 : (n.duration === 4.0 ? 1 : 8))
           }));
-        
-        // 기존 소프라노 유지 + 생성된 하성 성부 통합
-        const newNotes = [...state.notes.filter(n => n.voice === 1), ...aiNotes];
-        engineRef.current?.setNotes(newNotes);
-      }
+          
+          // 전체 악보 덮어쓰기
+          engineRef.current?.setNotes(aiNotes);
+        }
     } catch (error) {
       console.error("AI Generation Error:", error);
       alert("백엔드 서버가 켜져 있는지 확인해 주세요.");
@@ -111,6 +110,8 @@ const App: React.FC = () => {
       setIsGenerating(false);
     }
   };
+
+  const noteElementsRef = useRef<Record<string, SVGGElement>>({});
 
   // 재생 기능
   const handlePlay = async () => {
@@ -131,53 +132,80 @@ const App: React.FC = () => {
     
     const currentBpm = 80;
     transport.bpm.value = currentBpm;
-
-    let scrollRaf: number;
-    const startScroll = () => {
-      const container = document.querySelector('.score-container') as HTMLElement;
-      if (container && transport.state === 'started') {
-        const currentBeat = transport.seconds * (currentBpm / 60);
-        container.scrollLeft = Math.max(0, (currentBeat * 95) - 300);
-        scrollRaf = requestAnimationFrame(startScroll);
-      }
-    };
+    const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
 
     state.notes.forEach(note => {
-      if (note.pitch === -1) return; // Skip rests in playback
+      if (note.pitch === -1) return; 
       const freq = Tone.Frequency(note.pitch, "midi").toFrequency();
       const timeInSec = note.offset * (60 / currentBpm);
-      const durInSec = note.duration * (60 / currentBpm);
       
       transport.schedule((t) => {
         synthRef.current?.triggerAttackRelease(freq, note.duration * 0.9, t);
-        
-        if (note.id) {
-          Tone.Draw.schedule(() => {
-            const el = document.getElementById(`note-${note.id}`);
-            if (el) {
-              el.querySelectorAll('path').forEach((p: any) => { 
-                p.dataset.origFill = p.style.fill; 
-                p.style.fill = '#ef4444'; 
-                p.style.stroke = '#ef4444'; 
-              });
-            }
-          }, t);
-          
-          Tone.Draw.schedule(() => {
-            const el = document.getElementById(`note-${note.id}`);
-            if (el) {
-              el.querySelectorAll('path').forEach((p: any) => { 
-                p.style.fill = p.dataset.origFill || ''; 
-                p.style.stroke = p.dataset.origFill || ''; 
-              });
-            }
-          }, t + durInSec);
-        }
       }, timeInSec); 
     });
 
+    // 60FPS 부드러운 애니메이션 및 스크롤루프
+    let animationFrameId: number;
+    let prevActiveIds = new Set<string>();
+
+    const updateVisuals = () => {
+      if (Tone.getTransport().state !== "started") return;
+
+      const currentBeat = Tone.getTransport().seconds * (currentBpm / 60);
+      
+      // 현재 프레임에서 활성화된 노트 식별
+      const currentActiveIds = new Set<string>();
+      state.notes.forEach(note => {
+        if (note.pitch === -1) return;
+        if (currentBeat >= note.offset && currentBeat < note.offset + note.duration && note.id) {
+          currentActiveIds.add(note.id);
+        }
+      });
+
+      // 새롭게 활성화된 노트 ON (빨간색)
+      currentActiveIds.forEach(id => {
+        if (!prevActiveIds.has(id)) {
+          const el = noteElementsRef.current[id];
+          if (el) {
+            el.style.fill = '#ff0000';
+            el.style.stroke = '#ff0000';
+            el.querySelectorAll('*').forEach((p: any) => { 
+              p.style.fill = '#ff0000'; 
+              p.style.stroke = '#ff0000'; 
+            });
+          }
+        }
+      });
+
+      // 더 이상 활성화되지 않은 노트 OFF (원래 색상 복구)
+      prevActiveIds.forEach(id => {
+        if (!currentActiveIds.has(id)) {
+          const el = noteElementsRef.current[id];
+          if (el) {
+            el.style.fill = themeColor;
+            el.style.stroke = themeColor;
+            el.querySelectorAll('*').forEach((p: any) => { 
+              p.style.fill = themeColor; 
+              p.style.stroke = themeColor; 
+            });
+          }
+        }
+      });
+
+      prevActiveIds = currentActiveIds;
+
+      // 60FPS 초당 60회 횡스크롤 계산 및 이동 (극강의 부드러움)
+      const container = document.querySelector('.score-container') as HTMLElement;
+      if (container) {
+        const scrollX = Math.max(0, (currentBeat * 95) - (container.clientWidth / 3));
+        container.scrollLeft = scrollX;
+      }
+
+      animationFrameId = requestAnimationFrame(updateVisuals);
+    };
+
     transport.start();
-    scrollRaf = requestAnimationFrame(startScroll);
+    animationFrameId = requestAnimationFrame(updateVisuals);
     
     // 마지막 노트 종료 시 정지 처리
     const totalDurationBeats = state.notes.length > 0 ? Math.max(...state.notes.map(n => n.offset + n.duration)) : 0;
@@ -186,7 +214,19 @@ const App: React.FC = () => {
     transport.schedule(() => {
       setIsPlaying(false);
       transport.stop();
-      cancelAnimationFrame(scrollRaf);
+      cancelAnimationFrame(animationFrameId);
+      
+      // 종료 시 뷰 및 색상 원상 복구
+      Object.values(noteElementsRef.current).forEach(el => {
+        el.style.fill = themeColor;
+        el.style.stroke = themeColor;
+        el.querySelectorAll('*').forEach((p: any) => { 
+          p.style.fill = themeColor; 
+          p.style.stroke = themeColor; 
+        });
+      });
+      const container = document.querySelector('.score-container') as HTMLElement;
+      if (container) container.scrollLeft = 0;
     }, totalDurationSec);
   };
 
@@ -313,6 +353,7 @@ const App: React.FC = () => {
                 cursorPitch={state.cursorPitch} 
                 isDarkMode={isDarkMode}
                 width={1200}
+                onRenderMap={(map) => { noteElementsRef.current = map; }}
               />
             </div>
           </div>

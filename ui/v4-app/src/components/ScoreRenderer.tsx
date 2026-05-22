@@ -7,13 +7,15 @@ interface ScoreRendererProps {
   cursorPitch: number;
   isDarkMode: boolean;
   width?: number;
+  onRenderMap?: (map: Record<string, SVGGElement>) => void;
 }
 
 export const ScoreRenderer: React.FC<ScoreRendererProps> = ({ 
   notes, 
   cursorPitch, 
   isDarkMode,
-  width = 1400 
+  width = 1400,
+  onRenderMap
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -23,34 +25,67 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
     try {
       containerRef.current.innerHTML = '';
 
+      const BEATS_PER_MEASURE = 4.0;
+      const lastNote = notes.length > 0 ? notes.reduce((max, n) => n.offset + n.duration > max.offset + max.duration ? n : max) : null;
+      const maxMeasureIdx = Math.max(0, Math.floor((lastNote ? lastNote.offset + lastNote.duration - 0.001 : 0) / BEATS_PER_MEASURE));
+      
+      const dynamicWidth = 100 + 450 + (maxMeasureIdx * 380) + 100; // startX + first measure + rest measures + padding
+
       const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
-      renderer.resize(width, 600);
+      renderer.resize(dynamicWidth, 600);
       const context = renderer.getContext();
       
       const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
       context.setFillStyle(themeColor);
       context.setStrokeStyle(themeColor);
 
-      const BEATS_PER_MEASURE = 4.0;
       const measures: Record<number, NoteData[]>[] = [];
-      
-      const lastNote = notes.length > 0 ? notes.reduce((max, n) => n.offset + n.duration > max.offset + max.duration ? n : max) : null;
-      const maxMeasureIdx = Math.max(0, Math.floor((lastNote ? lastNote.offset + lastNote.duration - 0.001 : 0) / BEATS_PER_MEASURE));
       
       for (let i = 0; i <= maxMeasureIdx; i++) {
         measures[i] = { 1: [], 2: [], 3: [], 4: [] };
       }
 
       notes.forEach(note => {
-        const mIdx = Math.floor(note.offset / BEATS_PER_MEASURE);
-        if (measures[mIdx]) {
-          measures[mIdx][note.voice as 1|2|3|4].push(note);
+        let currentOffset = note.offset;
+        let remainingDuration = note.duration;
+        
+        while (remainingDuration > 0.001) {
+          const mIdx = Math.floor(currentOffset / BEATS_PER_MEASURE);
+          if (mIdx < 0 || mIdx > maxMeasureIdx) break;
+          
+          const measureEnd = (mIdx + 1) * BEATS_PER_MEASURE;
+          const durationInThisMeasure = Math.min(remainingDuration, measureEnd - currentOffset);
+          
+          if (measures[mIdx]) {
+            // Find closest DurationType (1=w, 2=h, 4=q, 8=8, 16=16, 32=32)
+            let durType: number = 4;
+            const rounded = Math.round(durationInThisMeasure * 1000) / 1000;
+            if (rounded >= 4.0) durType = 1;
+            else if (rounded >= 2.0) durType = 2;
+            else if (rounded >= 1.0) durType = 4;
+            else if (rounded >= 0.5) durType = 8;
+            else if (rounded >= 0.25) durType = 16;
+            else durType = 32;
+
+            measures[mIdx][note.voice as 1|2|3|4].push({
+              ...note,
+              offset: currentOffset,
+              duration: durationInThisMeasure,
+              durationType: durType as any
+            });
+          }
+          
+          currentOffset += durationInThisMeasure;
+          remainingDuration -= durationInThisMeasure;
         }
       });
 
       let startX = 100;
       const yTreble = 80;
       const yBass = 280;
+      
+      // Store all created notes for the map
+      const allRenderedNotes: { note: StaveNote, id: string }[] = [];
 
       measures.forEach((measure, idx) => {
         const measureWidth = idx === 0 ? 450 : 380;
@@ -79,7 +114,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
 
           sortedNotes.forEach(n => {
             if (n.offset > currentPos) {
-              vfNotes.push(...createRests(currentPos, n.offset, clef, stemDirection));
+              vfNotes.push(...createRests(currentPos, n.offset, clef, stemDirection, isDarkMode));
               currentPos = n.offset;
             }
             
@@ -93,14 +128,13 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
                 duration: isRest ? `${durationToVex(n.durationType)}r` : durationToVex(n.durationType)
               });
               
-              // 명시적으로 기둥 방향 강제 적용
               sn.setStemDirection(stemDirection);
-              
               sn.setStyle({ fillStyle: themeColor, strokeStyle: themeColor });
               if (!isRest && key.includes("#")) sn.addModifier(new Accidental("#"));
               
               if (n.id) {
                 sn.setAttribute('id', `note-${n.id}`);
+                allRenderedNotes.push({ note: sn, id: n.id });
               }
               
               vfNotes.push(sn);
@@ -116,17 +150,17 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           }
 
           if (currentPos < targetEnd) {
-            vfNotes.push(...createRests(currentPos, targetEnd, clef, stemDirection));
+            vfNotes.push(...createRests(currentPos, targetEnd, clef, stemDirection, isDarkMode));
           }
 
           const voice = new Voice({ num_beats: 4, beat_value: 4 }).setStrict(false);
           return voice.addTickables(vfNotes);
         };
 
-        const vSoprano = createStrictVoice(measure[1], 'treble', 1, true); // Soprano: Up
-        const vAlto = createStrictVoice(measure[2], 'treble', -1);        // Alto: Down
-        const vTenor = createStrictVoice(measure[3], 'bass', 1);          // Tenor: Up
-        const vBassNote = createStrictVoice(measure[4], 'bass', -1);      // Bass: Down
+        const vSoprano = createStrictVoice(measure[1], 'treble', 1, true); 
+        const vAlto = createStrictVoice(measure[2], 'treble', -1);        
+        const vTenor = createStrictVoice(measure[3], 'bass', 1);          
+        const vBassNote = createStrictVoice(measure[4], 'bass', -1);      
 
         new Formatter().joinVoices([vSoprano, vAlto]).format([vSoprano, vAlto], measureWidth - 100);
         vSoprano.draw(context, trebleStave);
@@ -139,10 +173,26 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         startX += measureWidth;
       });
 
+      // 렌더링 완료 후 모든 노트의 SVG Element를 추출하여 부모로 전달
+      if (onRenderMap) {
+        const svgMap: Record<string, SVGGElement> = {};
+        allRenderedNotes.forEach(item => {
+          // VexFlow 4는 사용자가 부여한 id 앞에 'vf-'를 자동으로 붙입니다.
+          let domEl = document.getElementById(`vf-note-${item.id}`);
+          // 만약 'vf-'가 붙지 않았다면 원래 id로 다시 시도
+          if (!domEl) domEl = document.getElementById(`note-${item.id}`);
+          
+          if (domEl) {
+            svgMap[item.id] = domEl as SVGGElement;
+          }
+        });
+        onRenderMap(svgMap);
+      }
+
     } catch (error) {
       console.error('Render Error:', error);
     }
-  }, [notes, cursorPitch, isDarkMode, width]);
+  }, [notes, cursorPitch, isDarkMode, width, onRenderMap]);
 
   return (
     <div className="score-wrapper">
@@ -151,7 +201,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   );
 };
 
-function createRests(start: number, end: number, clef: string, stemDirection: number): StaveNote[] {
+function createRests(start: number, end: number, clef: string, stemDirection: number, isDarkMode: boolean): StaveNote[] {
   const rests: StaveNote[] = [];
   let remaining = end - start;
   while (remaining > 0.001) {
@@ -169,7 +219,8 @@ function createRests(start: number, end: number, clef: string, stemDirection: nu
       duration: type + 'r'
     });
     r.setStemDirection(stemDirection);
-    r.setStyle({ fillStyle: 'rgba(128,128,128,0.3)', strokeStyle: 'rgba(128,128,128,0.3)' });
+    const restColor = isDarkMode ? 'rgba(255, 255, 255, 0.45)' : 'rgba(30, 41, 59, 0.45)';
+    r.setStyle({ fillStyle: restColor, strokeStyle: restColor });
     rests.push(r);
     remaining -= dur;
   }

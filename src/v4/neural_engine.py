@@ -29,7 +29,52 @@ class NeuralBachEngine:
                 print(f"Neural Engine loaded.")
             except: pass
 
+        # Pre-build a map of token IDs to pitch values for fast logit masking (preventing unisons)
+        self.token_pitches = {}
+        for token, token_id in self.tokenizer.stoi.items():
+            if token.startswith("[V"):
+                try:
+                    parts = token.split()
+                    if len(parts) >= 2 and parts[1].startswith("P"):
+                        pitch_val = int(parts[1][1:])
+                        self.token_pitches[token_id] = pitch_val
+                except:
+                    pass
+
+    def _get_active_pitches_at_current_time(self, current_seq):
+        active_pitches = set()
+        for token in reversed(current_seq):
+            if token.startswith("[TIME_"):
+                break
+            if token.startswith("[V"):
+                try:
+                    parts = token.split()
+                    if len(parts) >= 2 and parts[1].startswith("P"):
+                        active_pitches.add(int(parts[1][1:]))
+                except:
+                    pass
+        return active_pitches
+
     def generate_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
+        best_notes = None
+        best_score = -1.0
+        max_attempts = 5
+        threshold = 90.0  # 화성 점수 문턱값 (정상 악곡은 보통 89~93점 수준)
+        
+        for attempt in range(max_attempts):
+            notes = self._generate_single_response(subject_notes, target_measures, temperature, refine_iters)
+            score = self._evaluate_harmony(notes)
+            
+            if score >= threshold:
+                return notes
+                
+            if score > best_score:
+                best_score = score
+                best_notes = notes
+                
+        return best_notes
+
+    def _generate_single_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         raw_key = "C" 
         current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]"]
         last_measure_idx = -1
@@ -39,12 +84,14 @@ class NeuralBachEngine:
         for n in subject_notes:
             off = round(float(n['offset']), 3)
             subject_map[off] = n
-
-        # 2. 주제(Soprano)의 실제 오프셋 기반으로 생성 루프 실행 (강제 0.5박 겹침 방지)
-        max_offset = target_measures * 4.0
-        sorted_offsets = sorted([off for off in subject_map.keys() if off < max_offset])
+ 
+        sorted_offsets = sorted(subject_map.keys())
+        current_offset = 0.0
+        curr_measure = 0
         
+        # 2. 사용자 입력(Soprano) 기반의 1차 생성 (Guided Generation)
         for off in sorted_offsets:
+            if off >= target_measures * 4.0: break
             curr_measure = int(off // 4)
             
             # 마디 변경 제어
@@ -61,16 +108,61 @@ class NeuralBachEngine:
             current_seq.append(f"[V1] P{int(n['pitch'])} D{round(float(n['duration']), 3)}")
             # 하성 3성부만 해당 오프셋에서 동일 리듬으로 생성
             self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V2]", "[V3]", "[V4]"], int(n['pitch']))
+            current_offset = off
             
-            # 강제 완주: 목표 마디 전에는 절대 멈추지 않음
-            if "[FINAL]" in current_seq[-5:] and curr_measure < target_measures - 1:
-                # FINAL 토큰이 실수로 나왔다면 제거하고 계속 진행
-                current_seq = [t for t in current_seq if t != "[FINAL]"]
-
+        # 3. AI 자유 작곡 (Continuation)
+        # 사용자의 입력이 끝난 시점부터 목표 마디 수까지 자유롭게 생성 (Auto-regressive)
+        max_new_tokens = 2500
+        for _ in range(max_new_tokens):
+            if curr_measure >= target_measures:
+                break
+                
+            try:
+                current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
+                logits, _ = self.model(current_idx[:, -BLOCK_SIZE:])
+                
+                # 목표 마디에 가까워지면 FINAL 유도
+                if curr_measure >= target_measures - 1:
+                    f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
+                    if f_idx != -1: logits[0, -1, f_idx] += 2.0
+                
+                # 유니즌 방지 마스킹
+                active_pitches = self._get_active_pitches_at_current_time(current_seq)
+                if active_pitches:
+                    bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
+                    if bad_indices:
+                        logits[0, -1, bad_indices] = -1e9
+                    
+                probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
+                idx_next = torch.multinomial(probs, num_samples=1)
+                token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+                
+                if token == "[FINAL]":
+                    if curr_measure >= target_measures - 1:
+                        current_seq.append(token)
+                        break
+                    else:
+                        # 아직 목표 길이에 도달하지 않았는데 끝나려고 하면 무시하고 다음 확률 높은 토큰 선택
+                        probs[0, idx_next.item()] = 0.0
+                        idx_next = torch.multinomial(probs, num_samples=1)
+                        token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+ 
+                current_seq.append(token)
+                
+                if token.startswith("[TIME_"):
+                    try:
+                        off = float(token[6:-1])
+                        curr_measure = int(off // 4)
+                    except: pass
+                    
+            except Exception as e:
+                break
+ 
         if refine_iters > 0:
             current_seq = self._refine_sequence(current_seq, refine_iters, temperature)
-
-        return self._parse_tokens_to_notes(current_seq)
+ 
+        notes = self._parse_tokens_to_notes(current_seq)
+        return self._fix_silence_gaps(notes, target_measures * 4.0)
 
     def _inject_roman_token(self, current_seq, temperature):
         try:
@@ -87,7 +179,6 @@ class NeuralBachEngine:
 
     def _fill_voices(self, current_seq, target_measures, curr_measure, temperature, required_voices, base_pitch):
         found_voices = []
-        # 시퀀스 중복 방지를 위한 로컬 셋
         for retry in range(15):
             try:
                 current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
@@ -97,6 +188,13 @@ class NeuralBachEngine:
                 if curr_measure >= target_measures - 1:
                     f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
+                
+                # 유니즌 방지 마스킹
+                active_pitches = self._get_active_pitches_at_current_time(current_seq)
+                if active_pitches:
+                    bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
+                    if bad_indices:
+                        logits[0, -1, bad_indices] = -1e9
                 
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
@@ -112,14 +210,17 @@ class NeuralBachEngine:
                 if len(found_voices) == len(required_voices): break
             except: break
                 
-        # 누락 성부 강제 할당 (Collision 방지)
+        # 누락 성부 강제 할당 (Collision 방지 및 유니즌 방지)
         for v in required_voices:
             if v not in found_voices:
-                p = base_pitch - (12 if v != "[V1]" else 0)
-                current_seq.append(f"{v} P{p} D0.5")
+                active_pitches = self._get_active_pitches_at_current_time(current_seq)
+                candidate_pitch = base_pitch - (12 if v != "[V1]" else 0)
+                while candidate_pitch in active_pitches:
+                    candidate_pitch -= 12
+                current_seq.append(f"{v} P{candidate_pitch} D0.5")
 
     def _refine_sequence(self, full_seq, iters, temp):
-        return full_seq # Refinement temporarily disabled for stability
+        return full_seq # Refinement temporarily disabled for stability # Refinement temporarily disabled for stability
 
     def _parse_tokens_to_notes(self, tokens):
         notes = []
@@ -143,3 +244,86 @@ class NeuralBachEngine:
                         seen_notes.add(key)
                 except: pass
         return notes
+
+    def _fix_silence_gaps(self, notes, max_time):
+        if not notes:
+            return notes
+            
+        step = 0.125
+        t = 0.0
+        
+        voice_notes = {1: [], 2: [], 3: [], 4: []}
+        for n in notes:
+            voice_notes[n["voice"]].append(n)
+            
+        for v in [1, 2, 3, 4]:
+            voice_notes[v].sort(key=lambda x: x["offset"])
+            
+        while t < max_time:
+            active_count = 0
+            for v in [1, 2, 3, 4]:
+                for n in voice_notes[v]:
+                    if n["offset"] - 0.001 <= t < n["offset"] + n["duration"] - 0.001:
+                        active_count += 1
+                        break
+            
+            if active_count == 0:
+                # Silence detected at time t! Extend the last played note for each voice.
+                for v in [1, 2, 3, 4]:
+                    last_note = None
+                    for n in voice_notes[v]:
+                        if n["offset"] + n["duration"] - 0.001 <= t:
+                            last_note = n
+                    
+                    if last_note is not None:
+                        new_dur = t + step - last_note["offset"]
+                        last_note["duration"] = round(new_dur, 3)
+                        
+            t += step
+            
+        return notes
+
+    def _evaluate_harmony(self, notes):
+        if not notes:
+            return 0.0
+            
+        offsets = sorted(list(set(n["offset"] for n in notes)))
+        if not offsets:
+            return 100.0
+            
+        total_score = 0.0
+        evaluation_points = 0
+        
+        for off in offsets:
+            active_pitches = []
+            for n in notes:
+                if n["offset"] - 0.001 <= off < n["offset"] + n["duration"] - 0.001:
+                    active_pitches.append(n["pitch"])
+                    
+            if len(active_pitches) < 2:
+                total_score += 100.0
+                evaluation_points += 1
+                continue
+                
+            chord_score = 100.0
+            dissonant_count = 0
+            strong_dissonant_count = 0
+            
+            n_pitches = len(active_pitches)
+            for i in range(n_pitches):
+                for j in range(i + 1, n_pitches):
+                    diff = abs(active_pitches[i] - active_pitches[j]) % 12
+                    if diff in [1, 11]:  # Minor 2nd, Major 7th
+                        strong_dissonant_count += 1
+                    elif diff in [2, 10, 6]:  # Major 2nd, Minor 7th, Tritone
+                        dissonant_count += 1
+                        
+            chord_score -= (strong_dissonant_count * 25.0 + dissonant_count * 12.0)
+            chord_score = max(0.0, chord_score)
+            
+            total_score += chord_score
+            evaluation_points += 1
+            
+        average_score = total_score / evaluation_points if evaluation_points > 0 else 100.0
+        return average_score
+
