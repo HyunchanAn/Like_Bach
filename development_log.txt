@@ -295,3 +295,56 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 [2026-05-23 17:24] 악보 다성부 렌더링 시 과도한 가로 엇갈림(Collision Shift) 현상 수정
 - UI/UX: 3도 이상(온음 2개 이상) 벌어진 화음인데도 음표가 수직으로 가지런히 배열되지 않고 가로로 어긋나게(Shift) 렌더링되는 시각적 불편함 개선.
 - Bug Fix: 앞서 수직 박자 정렬을 위해 4성부 전체를 joinVoices로 묶었던 것이 원인. VexFlow 엔진이 4개의 성부가 모두 '같은 오선지(Stave)' 위에 있다고 착각하여 서로 겹치지 않게 하려고 강제로 가로 오프셋을 주었던 버그임. 이를 joinVoices([Soprano, Alto])와 joinVoices([Tenor, Bass])로 오선지별로 분리 그룹화한 뒤에 ormat을 한꺼번에 돌리도록 로직을 정교화하여 완벽한 수직 정렬을 달성함.
+
+[2026-05-23 19:55] Fugue Model 기획안 추가
+# Fugue Model AI Implementation Plan (Phase 1: Architecture & Data Pipeline)
+
+코랄(Chorale) 모델과 달리, 푸가(Fugue)는 극단적인 다성부(Polyphony)와 긴 호흡의 모방 대위법(Imitative Counterpoint)을 가집니다. 따라서 기존 `Like_Bach` 모델 구조를 그대로 쓰기보다는, 푸가에 특화된 데이터 가공 및 모델 아키텍처 기획이 필수적입니다. 
+
+준비해주신 데이터(`E:\Github\Like_Bach\data\raw\# Fugue`)를 기반으로 한 모델 기획입니다.
+
+## User Review Required
+
+> [!WARNING]
+> **데이터 전처리(Labeling) 난이도**
+> 푸가의 경우 "어디서부터 어디까지가 Subject이고 Answer인지" 모델에게 알려주려면 구조 토큰(`[SUBJECT]`, `[ANSWER]` 등)이 필요합니다. 이를 자동화하기 위해 `music21`을 사용하여 첫 번째 성부의 진입을 `[SUBJECT]`, 두 번째 성부의 진입(보통 5도 이조)을 `[ANSWER]`로 자동 태깅하는 휴리스틱 파이프라인을 구축하려고 합니다. 데이터 전처리에 다소 시간이 소요될 수 있는데 진행해도 괜찮을까요?
+
+> [!IMPORTANT]
+> **모델 컨텍스트 길이 (Sequence Length)**
+> 푸가는 코랄보다 훨씬 깁니다. 기존 모델의 `BLOCK_SIZE = 1024`로는 푸가 한 곡을 온전히 담기 부족할 수 있습니다. `BLOCK_SIZE`를 4096 이상으로 늘리거나, RoPE(Rotary Position Embedding)와 같은 상대적 위치 인코딩을 도입하는 아키텍처 확장이 필요합니다.
+
+## Proposed Plan
+
+### 1. Data Pipeline (데이터 가공 및 구조 토큰화)
+- **대상 파일 및 데이터소스 (Data Sources)**: 
+  - `E:\Github\Like_Bach\data\raw\# Fugue` 내의 데이터들을 기본으로 활용합니다. (WTC, Art of Fugue 등)
+  - **데이터 부족(Sparsity) 해결 전략**: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
+    1. **Data Augmentation**: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
+    2. **Dataset Expansion**: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
+    3. **대규모 오픈 데이터셋(Open Datasets) 결합**: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 **MAESTRO Dataset**(Google Magenta), **GiantMIDI-Piano**, 그리고 **Lakh MIDI Dataset** 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
+  - 추가 메타데이터는 **KernScores 데이터베이스(Humdrum 포맷, `.krn`)** 와 **music21 내장 Bach Corpus**를 적극 활용합니다.
+- **파서(Parser) 로직 구현**:
+  - `music21`로 곡을 불러와 각 성부별 진입(Entry) 시점을 분석합니다.
+  - 최초 진입 성부의 멜로디 라인을 추출하여 `[SUBJECT]` 토큰으로 감쌉니다.
+  - 다음 성부가 진입할 때 `[ANSWER]`(Real/Tonal 구분) 토큰으로 감싸고, 첫 성부의 라인은 `[COUNTERSUBJECT]`로 태깅합니다.
+  - 모든 성부가 한 번씩 등장한 이후의 전개부는 `[EPISODE]`, 마지막 페달 포인트나 밀집 묘출은 `[STRETTO]`/`[CADENCE]`로 분류합니다.
+- **토큰 포맷 설계**: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
+
+### 2. Model Architecture (모델 구조 변경)
+- **컨텍스트 확장**: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
+- **디코딩(Inference) 단계의 하이브리드 제어**:
+  - 푸가의 대위법(Parallel 5ths, Octaves 금지 등)을 모델이 완전히 Zero-shot으로 완벽히 지키기는 어렵습니다.
+  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 **결함 없는 생성 루프**를 설계합니다.
+
+### 3. Training Strategy (학습 전략)
+- **Pre-training**: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
+- **Fine-tuning**: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
+
+## Verification Plan
+
+### Automated Tests
+- 전처리 파이프라인(`fugue_parser.py`)을 돌렸을 때, WTC 1권 C Major 푸가의 Subject와 Answer 길이가 정확하게 music21로 식별 및 분리되는지 단위 테스트(Unit Test)를 진행합니다.
+
+### Manual Verification
+- 파싱된 텍스트(토큰 시퀀스)를 직접 읽어보며 `[SUBJECT]` 직후에 다른 성부에서 정확히 5도 이조된 `[ANSWER]`가 토큰화되었는지 검수합니다.
+
