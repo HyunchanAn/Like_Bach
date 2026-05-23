@@ -138,9 +138,10 @@ const App: React.FC = () => {
       if (note.pitch === -1) return; 
       const freq = Tone.Frequency(note.pitch, "midi").toFrequency();
       const timeInSec = note.offset * (60 / currentBpm);
+      const durationInSec = note.duration * (60 / currentBpm);
       
       transport.schedule((t) => {
-        synthRef.current?.triggerAttackRelease(freq, note.duration * 0.9, t);
+        synthRef.current?.triggerAttackRelease(freq, durationInSec * 0.85, t);
       }, timeInSec); 
     });
 
@@ -272,7 +273,7 @@ const App: React.FC = () => {
             <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--accent)', minWidth: '30px', textAlign: 'center' }}>{targetMeasures}</span>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button 
               onClick={handlePlay}
               className="nwc-btn"
@@ -354,6 +355,10 @@ const App: React.FC = () => {
                 isDarkMode={isDarkMode}
                 width={1200}
                 onRenderMap={(map) => { noteElementsRef.current = map; }}
+                onNoteClick={(pitch) => {
+                  engineRef.current?.addNoteAtPitch(pitch);
+                  document.querySelector<HTMLElement>('.studio-root')?.focus();
+                }}
               />
             </div>
           </div>

@@ -100,6 +100,11 @@ export class NWCKeyboardEngine {
     this.notify(isRest ? undefined : this.state.cursorPitch);
   }
 
+  public addNoteAtPitch(pitch: number) {
+    this.state.cursorPitch = pitch;
+    this.addNote(false);
+  }
+
   private removeLastNote() {
     if (this.state.notes.length === 0) return;
     const lastNote = this.state.notes[this.state.notes.length - 1];

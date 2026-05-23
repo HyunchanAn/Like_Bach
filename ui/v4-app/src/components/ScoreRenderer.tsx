@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter, StaveConnector, Accidental } from 'vexflow';
 import type { NoteData } from '../engine/NWCKeyboardEngine';
 
@@ -8,6 +8,7 @@ interface ScoreRendererProps {
   isDarkMode: boolean;
   width?: number;
   onRenderMap?: (map: Record<string, SVGGElement>) => void;
+  onNoteClick?: (pitch: number) => void;
 }
 
 export const ScoreRenderer: React.FC<ScoreRendererProps> = ({ 
@@ -15,9 +16,62 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   cursorPitch, 
   isDarkMode,
   width = 1400,
-  onRenderMap
+  onRenderMap,
+  onNoteClick
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stavesRef = useRef<{ treble?: Stave, bass?: Stave }>({});
+
+  const [hoverState, setHoverState] = useState<{ x: number, y: number, pitchName: string } | null>(null);
+
+  const getPitchFromY = (y: number) => {
+    let pitch = 71; 
+    
+    if (y < 200 && stavesRef.current.treble) {
+      // VexFlow's exact line calculation
+      // line 0 = top line (F5), line 4 = bottom line (E4)
+      const line = stavesRef.current.treble.getLineForY(y);
+      const step = Math.round(line * 2);
+      const diatonicPitches = [77, 76, 74, 72, 71, 69, 67, 65, 64, 62, 60, 59, 57, 55, 53];
+      if (step >= 0 && step < diatonicPitches.length) pitch = diatonicPitches[step];
+      else if (step < 0) pitch = 79;
+      else pitch = 60;
+      
+    } else if (y >= 200 && stavesRef.current.bass) {
+      // line 0 = top line (A3), line 4 = bottom line (G2)
+      const line = stavesRef.current.bass.getLineForY(y);
+      const step = Math.round(line * 2);
+      const diatonicPitches = [57, 55, 53, 52, 50, 48, 47, 45, 43, 41, 40, 38, 36];
+      if (step >= 0 && step < diatonicPitches.length) pitch = diatonicPitches[step];
+      else if (step < 0) pitch = 59;
+      else pitch = 40;
+    }
+    
+    return pitch;
+  };
+
+  const handleScoreClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onNoteClick) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.clientY - rect.top;
+    onNoteClick(getPitchFromY(y));
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onNoteClick) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.clientY - rect.top;
+    const x = e.clientX - rect.left;
+    const pitch = getPitchFromY(y);
+    const pitchName = pitchToVexKey(pitch).replace('/', '').toUpperCase();
+    setHoverState({ x, y, pitchName });
+  };
+
+  const handleMouseLeave = () => {
+    setHoverState(null);
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -26,8 +80,15 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       containerRef.current.innerHTML = '';
 
       const BEATS_PER_MEASURE = 4.0;
-      const lastNote = notes.length > 0 ? notes.reduce((max, n) => n.offset + n.duration > max.offset + max.duration ? n : max) : null;
-      const maxMeasureIdx = Math.max(0, Math.floor((lastNote ? lastNote.offset + lastNote.duration - 0.001 : 0) / BEATS_PER_MEASURE));
+      
+      const maxNoteEnd = notes.length > 0 ? Math.max(...notes.map(n => n.offset + n.duration)) : 0;
+      const maxNoteMeasureIdx = Math.max(0, Math.floor(Math.max(0, maxNoteEnd - 0.001) / BEATS_PER_MEASURE));
+      
+      const v1Notes = notes.filter(n => n.voice === 1);
+      const cursorOffset = v1Notes.length > 0 ? Math.max(...v1Notes.map(n => n.offset + n.duration)) : 0;
+      const cursorMeasureIdx = Math.floor(cursorOffset / BEATS_PER_MEASURE);
+      
+      const maxMeasureIdx = Math.max(maxNoteMeasureIdx, cursorMeasureIdx);
       
       const dynamicWidth = 100 + 450 + (maxMeasureIdx * 380) + 100; // startX + first measure + rest measures + padding
 
@@ -95,6 +156,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         if (idx === 0) {
           trebleStave.addClef('treble').addTimeSignature('4/4');
           bassStave.addClef('bass').addTimeSignature('4/4');
+          stavesRef.current = { treble: trebleStave, bass: bassStave };
         }
 
         trebleStave.setContext(context).draw();
@@ -142,11 +204,23 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
             }
           });
 
-          if (isSoprano && idx === measures.length - 1) {
-            const cursorNote = new StaveNote({ clef: 'treble', keys: [pitchToVexKey(cursorPitch)], duration: 'q', stem_direction: 1 });
-            cursorNote.setStyle({ fillStyle: '#2dd4bf', strokeStyle: '#2dd4bf' });
-            vfNotes.push(cursorNote);
-            currentPos += 1.0;
+          if (isSoprano && idx === cursorMeasureIdx && Math.abs(currentPos - cursorOffset) < 0.001) {
+            const remainingSpace = targetEnd - currentPos;
+            if (remainingSpace > 0.001) {
+              let cursorDur = 1.0;
+              let cursorVexDur = 'q';
+              
+              if (remainingSpace >= 4.0) { cursorDur = 4.0; cursorVexDur = 'w'; }
+              else if (remainingSpace >= 2.0) { cursorDur = 2.0; cursorVexDur = 'h'; }
+              else if (remainingSpace >= 1.0) { cursorDur = 1.0; cursorVexDur = 'q'; }
+              else if (remainingSpace >= 0.5) { cursorDur = 0.5; cursorVexDur = '8'; }
+              else { cursorDur = remainingSpace; cursorVexDur = '16'; }
+  
+              const cursorNote = new StaveNote({ clef: 'treble', keys: [pitchToVexKey(cursorPitch)], duration: cursorVexDur, stem_direction: 1 });
+              cursorNote.setStyle({ fillStyle: '#2dd4bf', strokeStyle: '#2dd4bf' });
+              vfNotes.push(cursorNote);
+              currentPos += cursorDur;
+            }
           }
 
           if (currentPos < targetEnd) {
@@ -162,11 +236,13 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         const vTenor = createStrictVoice(measure[3], 'bass', 1);          
         const vBassNote = createStrictVoice(measure[4], 'bass', -1);      
 
-        new Formatter().joinVoices([vSoprano, vAlto]).format([vSoprano, vAlto], measureWidth - 100);
+        new Formatter()
+          .joinVoices([vSoprano, vAlto])
+          .joinVoices([vTenor, vBassNote])
+          .format([vSoprano, vAlto, vTenor, vBassNote], measureWidth - 100);
+
         vSoprano.draw(context, trebleStave);
         vAlto.draw(context, trebleStave);
-
-        new Formatter().joinVoices([vTenor, vBassNote]).format([vTenor, vBassNote], measureWidth - 100);
         vTenor.draw(context, bassStave);
         vBassNote.draw(context, bassStave);
 
@@ -195,8 +271,44 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
   }, [notes, cursorPitch, isDarkMode, width, onRenderMap]);
 
   return (
-    <div className="score-wrapper">
+    <div 
+      className="score-wrapper" 
+      onClick={handleScoreClick} 
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ cursor: 'crosshair', position: 'relative' }}
+    >
       <div ref={containerRef} className="score-renderer" />
+      {hoverState && (
+        <>
+          <div style={{
+            position: 'absolute',
+            left: hoverState.x + 15,
+            top: hoverState.y - 15,
+            background: 'rgba(45, 212, 191, 0.9)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            pointerEvents: 'none',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            zIndex: 10
+          }}>
+            {hoverState.pitchName}
+          </div>
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: hoverState.y,
+            height: '1px',
+            background: 'rgba(45, 212, 191, 0.4)',
+            pointerEvents: 'none',
+            zIndex: 9
+          }} />
+        </>
+      )}
     </div>
   );
 };

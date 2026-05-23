@@ -29,15 +29,21 @@ class NeuralBachEngine:
                 print(f"Neural Engine loaded.")
             except: pass
 
-        # Pre-build a map of token IDs to pitch values for fast logit masking (preventing unisons)
+        # Pre-build a map of token IDs to pitch and duration values for fast logit masking
         self.token_pitches = {}
+        self.token_voices = {}
+        self.token_durations = {}
         for token, token_id in self.tokenizer.stoi.items():
             if token.startswith("[V"):
+                self.token_voices[token_id] = token[:4]
                 try:
                     parts = token.split()
                     if len(parts) >= 2 and parts[1].startswith("P"):
                         pitch_val = int(parts[1][1:])
                         self.token_pitches[token_id] = pitch_val
+                    if len(parts) >= 3 and parts[2].startswith("D"):
+                        dur_val = float(parts[2][1:])
+                        self.token_durations[token_id] = dur_val
                 except:
                     pass
 
@@ -54,6 +60,15 @@ class NeuralBachEngine:
                 except:
                     pass
         return active_pitches
+
+    def _get_active_voices_at_current_time(self, current_seq):
+        active_voices = set()
+        for token in reversed(current_seq):
+            if token.startswith("[TIME_"):
+                break
+            if token.startswith("[V"):
+                active_voices.add(token[:4])
+        return active_voices
 
     def generate_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         best_notes = None
@@ -84,11 +99,11 @@ class NeuralBachEngine:
         for n in subject_notes:
             off = round(float(n['offset']), 3)
             subject_map[off] = n
- 
+  
         sorted_offsets = sorted(subject_map.keys())
         current_offset = 0.0
         curr_measure = 0
-        
+
         # 2. 사용자 입력(Soprano) 기반의 1차 생성 (Guided Generation)
         for off in sorted_offsets:
             if off >= target_measures * 4.0: break
@@ -132,17 +147,29 @@ class NeuralBachEngine:
                     bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
                     if bad_indices:
                         logits[0, -1, bad_indices] = -1e9
+                
+                # 성부 중복 방지 마스킹
+                active_voices = self._get_active_voices_at_current_time(current_seq)
+                if active_voices:
+                    bad_voice_indices = [tid for tid, v in self.token_voices.items() if v in active_voices]
+                    if bad_voice_indices:
+                        logits[0, -1, bad_voice_indices] = -1e9
+                
+                # 온음표(Whole note, D4.0) 억제 (종지부 제외)
+                if curr_measure < target_measures - 1:
+                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if abs(d - 4.0) < 0.001]
+                    if bad_dur_indices:
+                        logits[0, -1, bad_dur_indices] = -1e9
                     
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
                 token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
                 
                 if token == "[FINAL]":
-                    if curr_measure >= target_measures - 1:
+                    if curr_measure >= target_measures:
                         current_seq.append(token)
                         break
                     else:
-                        # 아직 목표 길이에 도달하지 않았는데 끝나려고 하면 무시하고 다음 확률 높은 토큰 선택
                         probs[0, idx_next.item()] = 0.0
                         idx_next = torch.multinomial(probs, num_samples=1)
                         token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
@@ -184,8 +211,8 @@ class NeuralBachEngine:
                 current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
                 logits, _ = self.model(current_idx[:, -BLOCK_SIZE:])
                 
-                # 목표 마디 근처에서만 FINAL 유도
-                if curr_measure >= target_measures - 1:
+                # 목표 마디 끝에 도달했을 때 FINAL 유도
+                if curr_measure >= target_measures:
                     f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
@@ -195,6 +222,19 @@ class NeuralBachEngine:
                     bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
                     if bad_indices:
                         logits[0, -1, bad_indices] = -1e9
+                
+                # 성부 중복 방지 마스킹
+                active_voices = self._get_active_voices_at_current_time(current_seq)
+                if active_voices:
+                    bad_voice_indices = [tid for tid, v in self.token_voices.items() if v in active_voices]
+                    if bad_voice_indices:
+                        logits[0, -1, bad_voice_indices] = -1e9
+                
+                # 온음표(Whole note, D4.0) 억제 (종지부 제외)
+                if curr_measure < target_measures - 1:
+                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if abs(d - 4.0) < 0.001]
+                    if bad_dur_indices:
+                        logits[0, -1, bad_dur_indices] = -1e9
                 
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
