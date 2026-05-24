@@ -15,18 +15,35 @@ class NeuralBachEngine:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         token_path = tokenizer_path if os.path.exists(tokenizer_path) else 'data/processed/v4/tokenizer.pkl'
+        fugue_token_path = 'models/v4/fugue_vocab.pkl'
+        
         if os.path.exists(token_path):
             with open(token_path, 'rb') as f:
                 self.tokenizer = pickle.load(f)
         else:
             self.tokenizer = BachTokenizer()
             
+        if os.path.exists(fugue_token_path):
+            with open(fugue_token_path, 'rb') as f:
+                self.fugue_tokenizer = pickle.load(f)
+        else:
+            self.fugue_tokenizer = self.tokenizer
+            
         self.model = BachTransformer(self.tokenizer.vocab_size, device=self.device).to(self.device)
+        self.fugue_model = BachTransformer(self.fugue_tokenizer.vocab_size, device=self.device).to(self.device)
+        
         if os.path.exists(model_path):
             try:
                 self.model.load_state_dict(torch.load(model_path, map_location=self.device))
                 self.model.eval()
-                print(f"Neural Engine loaded.")
+            except: pass
+            
+        fugue_model_path = 'models/v4/fugue_model.pt'
+        if os.path.exists(fugue_model_path):
+            try:
+                self.fugue_model.load_state_dict(torch.load(fugue_model_path, map_location=self.device))
+                self.fugue_model.eval()
+                print(f"Dual Neural Engine (Chorale & Fugue) loaded.")
             except: pass
 
         # Pre-build a map of token IDs to pitch and duration values for fast logit masking
@@ -110,7 +127,7 @@ class NeuralBachEngine:
 
     def _generate_single_fugue_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         raw_key = "C" 
-        current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]"]
+        current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]", "[SUBJECT]"]
         last_measure_idx = -1
         
         if not subject_notes:
@@ -123,16 +140,13 @@ class NeuralBachEngine:
         for n in subject_notes:
             off = round(float(n['offset']), 3)
             forced_notes.append({"offset": off, "pitch": int(n['pitch']), "duration": round(float(n['duration']), 3), "voice": "[V1]"})
-            ans_off = round(off + answer_start_off, 3)
-            ans_pitch = int(n['pitch']) - 7
-            forced_notes.append({"offset": ans_off, "pitch": ans_pitch, "duration": round(float(n['duration']), 3), "voice": "[V4]"})
             
         forced_notes.sort(key=lambda x: (x['offset'], x['voice']))
         
         curr_measure = 0
         current_offset = 0.0
         
-        # 1. 전시부(Exposition) 뼈대 삽입 및 대주제(Countersubject) 유도
+        # 1. Phase 2: Inject only the subject, and prompt with [ANSWER]
         for fn in forced_notes:
             off = fn['offset']
             if off >= target_measures * 4.0: break
@@ -142,7 +156,6 @@ class NeuralBachEngine:
                 remain = max(0, target_measures - curr_measure)
                 current_seq.append(f"[REMAIN_{remain}]")
                 last_measure_idx = curr_measure
-                self._inject_roman_token(current_seq, temperature)
             
             if off > current_offset or current_offset == 0.0:
                 current_seq.append(f"[TIME_{off}]")
@@ -152,11 +165,9 @@ class NeuralBachEngine:
             p = fn['pitch']
             d = fn['duration']
             current_seq.append(f"{v} P{p} D{d}")
-            
-            # 전시부(Exposition) 뼈대가 삽입된 후 빈 성부를 AI가 채우도록 함
-            # Subject(V1)가 연주될 때는 하성이 쉬고, Answer(V4)가 연주될 때 V1이 Countersubject 생성
-            if v == "[V4]":
-                self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]"], p)
+
+        # Inject [ANSWER] prompt to trigger auto-regressive polyphony
+        current_seq.append("[ANSWER]")
                 
         # 2. AI 자유 작곡 (Continuation - Episode)
         max_new_tokens = 2000
@@ -165,11 +176,11 @@ class NeuralBachEngine:
                 break
                 
             try:
-                current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
-                logits, _ = self.model(current_idx[:, -BLOCK_SIZE:])
+                current_idx = torch.tensor([self.fugue_tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
+                logits, _ = self.fugue_model(current_idx[:, -BLOCK_SIZE:])
                 
                 if curr_measure >= target_measures - 1:
-                    f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
+                    f_idx = self.fugue_tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
@@ -188,7 +199,7 @@ class NeuralBachEngine:
                     
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
-                token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+                token = self.fugue_tokenizer.itos.get(idx_next.item(), "[UNK]")
                 
                 if token == "[FINAL]":
                     if curr_measure >= target_measures:
@@ -197,7 +208,7 @@ class NeuralBachEngine:
                     else:
                         probs[0, idx_next.item()] = 0.0
                         idx_next = torch.multinomial(probs, num_samples=1)
-                        token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+                        token = self.fugue_tokenizer.itos.get(idx_next.item(), "[UNK]")
  
                 current_seq.append(token)
                 

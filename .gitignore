@@ -8,9 +8,22 @@ venv/
 # Data
 data/raw/
 data/processed/**/*.pt
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Data
+data/raw/
+data/processed/**/*.pt
 data/processed/**/*.pkl
 
 # Tools
 .vscode/
 .idea/
 scratch/
+# Models
+models/**/*.pt
+models/**/*.pkl

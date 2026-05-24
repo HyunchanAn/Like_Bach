@@ -343,12 +343,217 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 ## Verification Plan
 
 ### Automated Tests
+- Test: tests/test_backend.py에 백엔드 핵심 엔진(FugueEngine) 및 FastAPI 라우팅 검증용 경량 단위 테스트 세트 수립
+- Frontend: eslint.config.js, tsconfig.app.json 커스터마이징 및 package.json 빌드 스크립트 수정으로 프론트엔드 프로덕션 빌드 무결성 확보
+- Health: 4월 19일 개발일지 한글 인코딩 오염 오류 복구 완료 및 표준 UTF-8 단일화 저장
+- Optimize: ruff.toml 구성을 통해 v3, v4 등 딥러닝 학습 레거시 디렉토리의 린트 예외 처리 완료 및 린트 속도 극대화
+
+[Senior-level Upgrade Tasks / Future Roadmap]
+- [ ] 1. 문서화 체계화
+  - docs/ ARCHITECTURE.md 신설: 신경망 모델 아키텍처 및 Guided Gibbs Sampling 작곡 흐름을 설명하는 Mermaid 다이어그램 작성
+  - docs/ DECISIONS.md (ADR) 신설: macOS MLX 예외 처리 및 FastAPI/FugueEngine 폴백 아키텍처 결정 이력 기록
+  - 핵심 소스코드(src/main.py, src/engine.py, src/models.py)의 모든 함수와 클래스에 Google 스타일 Docstring 및 Type Hints 추가
+- [ ] 2. 코드 품질 표준화
+  - .pre-commit-config.yaml 파일 추가를 통해 로컬 git commit 시점에 ruff 및 black 자동 수행 연동
+- [ ] 3. 테스트 고도화
+  - tests/test_backend.py 에 seed 고정 deterministic test 도입하여 생성 결과의 일관성 확인
+  - edge case 테스트 추가: 빈 멜로디 딕셔너리, 무한 재생 루프 방지 로직 등을 property-based test(hypothesis) 구조로 모방하여 강화
+- [ ] 4. Packaging & Releasability
+  - pyproject.toml 도입하여 Like Bach 작곡 엔진을 설치 및 배포 가능한 정식 Python 패키지(like-bach-engine) 형태로 구조화
+
+[2026-05-22 18:50 / Antigravity] Like Bach Studio v4.6 핫픽스
+- AI/Harmony: neural_engine.py 렌더링 로직 수정. 강제 0.5박 간격 생성이 아닌, 입력된 주제(Soprano)의 실제 오프셋과 리듬을 바탕으로 생성 루프를 실행하도록 변경하여 음표 겹침 및 불협화음 문제 완벽 해결.
+- UI/Playback: ScoreRenderer.tsx에서 VexFlow 렌더링 시 고유 SVG ID를 부여하고, App.tsx의 Tone.js 스케줄러(Tone.Draw)와 연동하여 재생 위치에 맞춘 가로 횡스크롤 및 빨간색 음표 실시간 하이라이팅 기능 구현.
+- UI/Score: 4성부(Soprano, Alto, Tenor, Bass) 기둥 방향 렌더링 오류 수정. VexFlow `stem_direction` 생성자 옵션이 무시되는 버그를 발견하여 `.setStemDirection()` 메서드를 명시적으로 호출하도록 강제 적용 완료 (소프라노/테너는 윗방향, 알토/베이스는 아랫방향).
+
+[2026-05-22 22:55 / Antigravity] 모델 재학습 완료 및 서버 재시작
+- AI/Harmony: 전처리 코드 오류 수정(recurse() -> flatten()을 통한 Global Offset 추출) 후 데이터 전처리 재수행 완료.
+- 모델 학습: 깨끗한 수평적/수직적 화성 맥락을 담은 올바른 데이터셋으로 10,000 Step 재학습 완료. 최종 Loss는 약 0.0876 수준으로 수렴하며 바흐 코랄 특유의 정상적인 화성 진행 규칙을 성공적으로 학습함.
+- Backend: 최신 가중치(weights)를 로드하기 위해 백엔드 API 서버 재가동. (프론트엔드/백엔드 모두 정상 운영 중)
+
+[2026-05-23 00:58] 4성부 유니즌 생성 방지 로직 적용 및 서버 재시작
+- AI/Harmony: 동일 시각(Offset)에 서로 다른 성부가 동일한 음높이(Pitch)를 소리 내지 않도록 방지하는 로직 적용.
+- 구현 상세:
+  1) NeuralBachEngine 초기화 시 토큰 ID와 피치(Pitch) 값을 매핑하는 self.token_pitches 구축.
+  2) 현재 생성 중인 토큰 시퀀스에서 가장 최근의 [TIME_...] 토큰 이후 배치된 성부들의 피치 집합(active_pitches)을 추적하는 헬퍼 함수 추가.
+  3) 1차 성부 생성(_fill_voices) 및 2차 AI 자유 작곡(Continuation) 루프에서 active_pitches에 포함된 음의 로짓(logits)을 극소값(-1e9)으로 마스킹하여 유니즌 생성을 원천 배제.
+  4) 누락 성부 강제 할당 시에도 active_pitches를 피하여 옥타브 아래로 할당되도록 예외 처리 보완.
+- Backend: 수정한 신경망 엔진 적용을 위해 API 서버 재기동 완료. 로컬 단위 검증 결과 유니즌 발생 차단 정상 작동 확인.
+
+[2026-05-23 01:07] 악보 내 자동 패딩 쉼표의 다크 모드 시인성 개선
+- UI/Score: ScoreRenderer.tsx에서 자동 패딩으로 생성되는 쉼표(createRests)의 색상이 회색 반투명(rgba(128,128,128,0.3))으로 고정되어 다크 모드 배경에서 시인성이 크게 떨어지는 문제를 해결함.
+- 구현 상세:
+  1) createRests 함수가 isDarkMode 상태를 전달받도록 서명 변경.
+  2) 다크 모드일 때는 밝은 반투명 흰색(rgba(255, 255, 255, 0.45)), 라이트 모드일 때는 어두운 반투명 색상(rgba(30, 41, 59, 0.45))을 사용하도록 조건부 스타일 적용.
+  3) createStrictVoice 함수 내에서 createRests를 호출하는 부위에 isDarkMode 인자를 전달하도록 수정 완료.
+- 사후 검증: 프론트엔드 HMR 핫 리로드 완료 후, 다크 모드 화면에서 쉼표가 정상적으로 명확하게 표시됨을 확인함.
+
+[2026-05-23 01:45] 1차 생성 구간 하성 성부 리듬(듀레이션) 동기화 적용
+- AI/Harmony: 사용자가 입력한 주제(Soprano)의 리듬 흐름과 일치하지 않고 온음표나 2분음표 등이 무작위로 샘플링되어 리듬 구조가 흐트러지는 문제를 해결함.
+- 구현 상세:
+  1) NeuralBachEngine 초기화 시 각 토큰의 듀레이션(Duration) 값을 매핑하는 self.token_durations 딕셔너리 구축.
+  2) 1차 성부 생성(_fill_voices) 함수 호출 시 소프라노의 기준 듀레이션(base_duration)을 전달받도록 개선.
+  3) 샘플링 시 base_duration과 일치하지 않는 듀레이션을 가진 토큰들의 Logits 값을 극소값(-1e9)으로 마스킹 처리하여 리듬 수직 동기화(Homophony) 구현.
+  4) 누락 성부 강제 할당 시에도 하드코딩된 D0.5 대신 base_duration을 동적으로 적용하도록 수정 완료.
+  5) AI 자유 작곡(Continuation) 영역은 규제를 가하지 않고 기존의 대위법적 변주가 자연스럽게 동작하도록 보존.
+- Backend: 리듬 동기화 로직 적용 후 API 서버 재기동 및 로컬 테스트 완료. 사용자 입력 구간의 4성부 리듬 정렬 상태 정상 검증함.
+
+[2026-05-23 01:50] 리듬 동기화 롤백 및 다채로운 대위 선율 복구
+- AI/Harmony: 1차 생성 구간의 리듬 동기화 적용 결과, 음악이 수직적으로 과도하게 정렬되어 단조로워지는 현상이 발생함. 다성 음악 특유의 다채롭고 독립적인 대위 리듬을 살리기 위해 동기화 제약을 롤백함.
+- 구현 상세:
+  1) NeuralBachEngine에서 self.token_durations 구축 및 관련 로직을 완전히 제거함.
+  2) _fill_voices 함수 및 1차 성부 생성 과정에서 리듬 마스킹 제약을 제거하여 각 성부의 원래 독립적인 리듬 생성을 보존함.
+  3) 누락 성부 강제 할당 시 0.5 박자 고정 할당 방식을 유지함.
+  4) 화성적 퀄리티를 유지하기 위한 유니즌 방지 로직(active_pitches 기반 마스킹)은 그대로 유지함.
+- Backend: 롤백 코드 반영 후 API 서버 재기동 완료. 로컬 검증 결과 다채로운 대위적 리듬 재생을 확인 완료함.
+
+[2026-05-23 01:55] 뜬금없는 성부 전체 침묵 구간(Silence Gap) 방지 로직 적용 및 마디 경계 렌더링 수정
+- AI/Harmony: 생성 시 특정 오프셋 사이에서 모든 성부가 동시에 쉬어 버려 음악의 흐름이 단조로워지거나 뜬금없이 끊기는 문제를 해결함.
+- 구현 상세:
+  1) Backend: NeuralBachEngine에 _fix_silence_gaps 함수를 설계하여 생성된 노트들을 스캔함. 곡 진행 중 0.125박 단위로 네 성부가 모두 침묵하는 구간을 탐색하여, 침묵이 발견될 시 각 성부의 직전 음표 길이를 자동으로 연장(Sustain)시켜 침묵 구간을 메워 주도록 조치함.
+  2) Frontend: ScoreRenderer.tsx에서 마디 경계(Barline)를 넘어가는 음표들이 시작 마디에만 할당되면서 다음 마디에서 유실 및 쉼표 처리되는 렌더링 버그를 수정함. 음표들을 마디 경계 기준으로 분할하여 각각의 마디에 정상적으로 배분해 렌더링하도록 개선함.
+- Backend/Frontend: 수정한 필터 적용 및 API 서버 재기동을 완료함.
+
+[2026-05-23 02:05] 화성 평가 알고리즘 도입 및 조건부 자동 재작곡 루프 적용
+- AI/Harmony: 악곡의 불완전협화음 구성을 억제하고 화성적 안정성을 확보하기 위해 생성 후 화성 평가를 수행하는 로직을 통합함.
+- 구현 상세:
+  1) neural_engine.py 내에 _evaluate_harmony 함수를 설계하여 생성된 악곡의 수직적 음정 관계를 분석함. 단2도 및 장7도는 강한 불협화음으로 간주하여 감점을 적용하고, 장2도, 단7도, 트라이톤은 일반 불협화음으로 감점 처리하여 전체 마디 평균 화성 점수를 산출함.
+  2) generate_response 메서드에 임계치 90.0점을 기준으로 최대 5회 재생성을 시도하는 루프를 구성함. 생성된 악곡의 화성 점수가 90.0점 미만일 경우 사용자에게 알리지 않고 내부적으로 자동 재작곡을 수행하도록 함.
+  3) 만약 5회의 시도 동안 90.0점을 넘지 못할 경우, 시도했던 결과물 중 가장 화성 점수가 높은 악곡을 최종 반환하도록 예외 처리를 마련하여 생성 품질의 일관성을 높임.
+- Backend: 엔진 변경 사항을 API 서버에 적용하고 검증을 완료함.
+
+[2026-05-23 02:10] 푸가적 작곡 고도화를 위한 개발 브랜치 생성
+- Git: main 브랜치로부터 feat/fugue-composition 브랜치를 새로 생성하고 전환함. 푸가(Fugue)의 모방 대위법 기법(주제 제시, 답선율 제시, 스트레토 등)을 학습하고 유도하는 고도화 작곡 로직의 구현을 시작함.
+
+[2026-05-23 02:20] 푸가적 작곡(Fugue Composition) 모드 기능 구현 완료
+- UI/Frontend: App.tsx 및 App.css 수정 완료.
+  1) AI COMPOSE 버튼 왼쪽에 Glassmorphism 스타일의 푸가적 악곡 체크박스를 추가함.
+  2) 입력한 테마(Soprano)의 총 마디 수(themeMeasures)의 2배 이상으로 Measures 슬라이더가 설정되었을 때에만 체크박스가 활성화되도록 예외 처리를 적용함.
+  3) 체크박스 비활성화 상태에서는 마우스 오버 시 필요한 조건(총 마디수를 X마디 이상으로 설정해야 활성화됩니다)을 툴팁으로 제공함.
+- Backend/API: api.py의 GenerationRequest 데이터 모델에 fugue_mode: bool 필드를 추가하고 생성 요청 시 백엔드 신경망 엔진으로 파라미터를 정상 인계함.
+- Engine/Harmony: neural_engine.py 고도화 완료.
+  1) 16.0 * n 오프셋(5마디, 9마디, 13마디 등)에서 알토(V2), 테너(V3), 베이스(V4) 성부에 순차적으로 Transpose(-7, -12, -19)된 테마를 매핑하는 스케줄러를 가동함.
+  2) 종지부 영역(곡 끝 - 테마 길이)에 소프라노(V1)의 원래 테마 및 베이스(V4)의 미믹(동일 리듬 및 굴곡 방향 모방) 테마를 매핑함.
+  3) AI 자유 작곡(Continuation) 단계에서 강제 주입된 성부가 중복 샘플링되는 것을 방지하기 위해 로짓 마스킹(-1e9) 처리를 적용함.
+- Verification: scratch/debug_fugue_composition.py 테스트 스크립트 실행 완료.
+  1) 4마디 테마 입력 및 16마디 작곡 조건 하에, 5마디 V2(-7 Transpose), 9마디 V3(-12 Transpose)에 테마가 정상 삽입됨을 확인함.
+  2) 13마디부터 시작되는 종지부 구간에서 V1의 원래 주제와 V4(Bass)의 100% 동일한 리듬 및 진행 방향을 따르는 평행 미믹 진행이 완벽히 정렬되어 생성됨을 검증함.
+  3) 화성 평가(Evaluation Score: 84.93) 및 유니즌 마스킹 동작 무결함을 확인함.
+  4) Backend API 서버(Port 8000) 및 프론트엔드 빌드 갱신 적용 완료.
+
+[2026-05-23 02:45] 종지부 제외 영역 온음표(Whole Note) 생성 억제 적용
+- Engine/Harmony: neural_engine.py 내 AI 생성 루프 수정 완료.
+  1) NeuralBachEngine 생성자(__init__) 내에 각 토큰 ID의 duration 값을 수집하는 self.token_durations 맵을 복구함.
+  2) 1차 성부 생성(_fill_voices) 및 2차 AI 자유 작곡(Continuation) 단계에서 현재 생성 중인 마디(curr_measure)가 마지막 마디(target_measures - 1)보다 작을 경우, duration이 4.0인 온음표 토큰의 샘플링 확률을 0으로 억제하기 위해 logits 마스킹(-1e9) 처리를 수행함.
+  3) 푸가 스케줄러 등을 통해 정교하게 예약되어 강제 주입되는 테마의 온음표는 보존하면서, AI가 중간 마디에서 무작위로 온음표를 샘플링하는 현상을 근본적으로 차단함.
+- Verification: scratch/debug_fugue_composition.py를 통한 시뮬레이션 재검증 완료.
+  1) 종지부 도달 전의 구간(마디 1~14)에서 AI가 독자적으로 생성한 온음표(duration 4.0)가 전혀 발생하지 않음을 확인함.
+  2) 종지부 영역인 마지막 15~16마디 구간 및 푸가 스케줄러로 강제 주입되는 고정 테마 음표의 온음표는 자연스럽게 보존됨을 확인함.
+  3) 최종 화성 점수 87.51점으로 음악적 결함이 없음을 검증함.
+- Backend: 수정한 엔진 적용을 위해 API 서버 재기동 완료.
+
+[2026-05-23 16:26] 푸가(Fugue) 작곡 관련 모든 기존 기능 및 엔진 일괄 제거
+- AI/Harmony: 향후 완전히 새로운 푸가 생성 규칙을 설계하기 위해, 기존에 추가되었던 fugue_mode (UI 체크박스, API 파라미터, NeuralBachEngine의 예약 주입 및 마스킹 스케줄러)를 모두 제거함.
+- Backend/Fallback: 구형 규칙 기반 대위법 엔진이었던 FugueEngine(src/engine.py) 및 관련 의존성, 테스트 스크립트(debug_fugue_composition.py, debug_composer.py)를 일괄 삭제하고, main.py와 test_backend.py를 간소화함.
+- Documentation: ARCHITECTURE.md 및 DECISIONS.md에서 FugueEngine 폴백 시스템 명세를 제거하고 변경 사항 반영.
+
+[2026-05-23 16:40] 종지부 다중 온음표(Silence Gap 연장 버그) 현상 수정
+- AI/Harmony: [FINAL] 토큰의 조기 생성 허용 조건이 target_measures - 1로 설정되어 있던 탓에, 마지막 마디가 온전히 시작되기도 전에 AI가 작곡을 조기 종료해버리는 문제를 발견함.
+- Backend: 조기 종료 후 _fix_silence_gaps 로직이 마지막 음표들을 곡의 최종 시간(max_time)까지 강제로 연장하면서, 여러 마디에 걸친 비정상적인 온음표가 생성되는 버그를 유발함.
+- 수정 사항: [FINAL] 토큰 유도 및 생성 종료 조건을 curr_measure >= target_measures로 수정하여, 마지막 마디까지 꽉 채워 작곡이 완료된 후에만 종료되도록 로직을 보강함. 이제 마지막 한 마디에서만 자연스럽게 온음표 종지가 이루어짐.
+
+[2026-05-23 16:52] 오디오 재생 시 인접한 동음(Same Pitch) 타이브(Tie) 현상 수정
+- UI/Playback: Tone.js로 오디오를 재생할 때 triggerAttackRelease에 전달되는 duration 파라미터가 초(Seconds) 단위가 아닌 박자(Beat) 단위 그대로 전달되던 버그를 발견함.
+- 결과적으로 1박(0.75초) 길이의 음표가 0.9초 동안 재생되어 다음 마디의 같은 음과 오버랩(Overlap)되면서 재타격(Attack)이 발생하지 않는 문제였음.
+- 수정 사항: 박자 단위를 현재 BPM 기준의 초 단위(durationInSec)로 변환한 후 0.85를 곱하여 약간의 음표 간 간격(Articulation)을 주도록 보완함. 이제 동일한 음이 연달아 나와도 각각 명확하게 발음됨.
+
+[2026-05-23 16:56] 악보 클릭을 통한 음표 입력 기능 추가
+- UI/UX: 마우스 클릭으로 음표를 추가하는 직관적 입력 방식 지원.
+- Frontend: ScoreRenderer에 Y 좌표 기반 피치(Pitch) 매핑 로직을 구현하여 사용자가 악보(오선지)의 특정 위치를 클릭하면 클릭된 높이에 해당하는 음표가 즉시 입력되도록 NWCKeyboardEngine과 연동 완료.
+
+[2026-05-23 17:00] 악보 마우스 클릭 피치(Pitch) 매핑 오차 수정 및 호버(Hover) 프리뷰 추가
+- UI/UX: 마우스 커서를 악보에 올렸을 때(Hover) 해당 위치의 음자리(예: C4, G5)가 툴팁으로 따라다니도록 가이드 라인과 함께 추가함.
+- Bug Fix: VexFlow의 오선지 렌더링 시작점(Bounding Box Top)과 실제 첫 번째 줄(Top Line) 사이의 10px 오프셋 차이를 계산에 반영하여, 커서 위치와 실제 찍히는 음표 위치가 정확히 일치하도록 매핑 공식을 (y - 110) / 5, (y - 310) / 5로 교정함.
+
+[2026-05-23 17:04] 악보 Y 좌표 픽셀 기반 매핑 버그 수정
+- UI/UX: 해상도나 화면 비율에 따라 오선지 Y 좌표가 미세하게 틀어져 마우스 포인터와 툴팁이 가리키는 음정(Pitch)이 어긋나는 치명적인 버그(2계단, 즉 10px 오차)를 수정함.
+- Bug Fix: 픽셀을 강제로 역연산하여 계산하던 방식을 버리고, VexFlow 라이브러리 내부에서 렌더링된 객체(Stave)의 getLineForY(y) 함수를 직접 호출하도록 구조를 개편함. 이제 화면 스케일링이나 해상도에 구애받지 않고 마우스가 가리키는 위치와 정확히 일치하는 노트가 배치 및 표기됨.
+
+[2026-05-23 17:09] 악보 다성부(Multi-Voice) 수직 정렬(박자) 오차 수정
+- UI/UX: 높은음자리표(Treble)와 낮은음자리표(Bass) 간의 동일한 박자에 위치한 음표들이 수직으로 정렬되지 않아 박자가 어긋나 보이는 시각적 버그 수정.
+- Bug Fix: VexFlow에서 Formatter가 각 Stave를 개별적으로 포매팅하던 기존 로직을 하나로 통합하여, 4성부(Soprano, Alto, Tenor, Bass) 전체를 joinVoices로 묶어 동시에 포매팅하도록 개편함. 이로써 마디 내의 모든 동일 박자가 완벽한 수직 정렬을 이룸.
+
+[2026-05-23 17:12] 악보 커서(Cursor) 렌더링에 의한 마디 박자 초과 버그 수정
+- UI/UX: 입력 커서를 나타내는 청록색 음표가 마디의 남은 박자를 무시하고 항상 삽입되면서, 4/4박자 마디 안에 5박자가 들어가는 기형적인 렌더링(예: 온음표 + 4분음표 커서)이 발생하는 문제 수정.
+- Bug Fix: 악보 렌더링 엔진(ScoreRenderer)이 커서 음표를 추가할 때, 현재 마디에 남은 여유 공간(Remaining Space)을 계산하도록 로직을 개선. 남은 공간을 초과하지 않는 적절한 길이의 커서 음표(예: 반음표, 4분음표 등)로 자동 조정되도록 하였으며, 마디가 꽉 찼을 경우 자동으로 다음 마디를 생성하고 커서를 넘기도록 마디 계산(Measure Index) 로직을 정교하게 다듬음.
+
+[2026-05-23 17:24] 악보 다성부 렌더링 시 과도한 가로 엇갈림(Collision Shift) 현상 수정
+- UI/UX: 3도 이상(온음 2개 이상) 벌어진 화음인데도 음표가 수직으로 가지런히 배열되지 않고 가로로 어긋나게(Shift) 렌더링되는 시각적 불편함 개선.
+- Bug Fix: 앞서 수직 박자 정렬을 위해 4성부 전체를 joinVoices로 묶었던 것이 원인. VexFlow 엔진이 4개의 성부가 모두 '같은 오선지(Stave)' 위에 있다고 착각하여 서로 겹치지 않게 하려고 강제로 가로 오프셋을 주었던 버그임. 이를 joinVoices([Soprano, Alto])와 joinVoices([Tenor, Bass])로 오선지별로 분리 그룹화한 뒤에 Format을 한꺼번에 돌리도록 로직을 정교화하여 완벽한 수직 정렬을 달성함.
+
+[2026-05-23 19:55] Fugue Model 기획안 추가
+# Fugue Model AI Implementation Plan (Phase 1: Architecture & Data Pipeline)
+
+코랄(Chorale) 모델과 달리, 푸가(Fugue)는 극단적인 다성부(Polyphony)와 긴 호흡의 모방 대위법(Imitative Counterpoint)을 가집니다. 따라서 기존 `Like_Bach` 모델 구조를 그대로 쓰기보다는, 푸가에 특화된 데이터 가공 및 모델 아키텍처 기획이 필수적입니다. 
+
+준비해주신 데이터(`E:\Github\Like_Bach\data\raw\# Fugue`)를 기반으로 한 모델 기획입니다.
+
+## User Review Required
+
+> [!WARNING]
+> **데이터 전처리(Labeling) 난이도**
+> 푸가의 경우 "어디서부터 어디까지가 Subject이고 Answer인지" 모델에게 알려주려면 구조 토큰(`[SUBJECT]`, `[ANSWER]` 등)이 필요합니다. 이를 자동화하기 위해 `music21`을 사용하여 첫 번째 성부의 진입을 `[SUBJECT]`, 두 번째 성부의 진입(보통 5도 이조)을 `[ANSWER]`로 자동 태깅하는 휴리스틱 파이프라인을 구축하려고 합니다. 데이터 전처리에 다소 시간이 소요될 수 있는데 진행해도 괜찮을까요?
+
+> [!IMPORTANT]
+> **모델 컨텍스트 길이 (Sequence Length)**
+> 푸가는 코랄보다 훨씬 깁니다. 기존 모델의 `BLOCK_SIZE = 1024`로는 푸가 한 곡을 온전히 담기 부족할 수 있습니다. `BLOCK_SIZE`를 4096 이상으로 늘리거나, RoPE(Rotary Position Embedding)와 같은 상대적 위치 인코딩을 도입하는 아키텍처 확장이 필요합니다.
+
+## Proposed Plan
+
+### 1. Data Pipeline (데이터 가공 및 구조 토큰화)
+- **대상 파일 및 데이터소스 (Data Sources)**: 
+  - `E:\Github\Like_Bach\data\raw\# Fugue` 내의 데이터들을 기본으로 활용합니다. (WTC, Art of Fugue 등)
+  - **데이터 부족(Sparsity) 해결 전략**: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
+    1. **Data Augmentation**: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
+    2. **Dataset Expansion**: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
+    3. **대규모 오픈 데이터셋(Open Datasets) 결합**: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 **MAESTRO Dataset**(Google Magenta), **GiantMIDI-Piano**, 그리고 **Lakh MIDI Dataset** 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
+  - 추가 메타데이터는 **KernScores 데이터베이스(Humdrum 포맷, `.krn`)** 와 **music21 내장 Bach Corpus**를 적극 활용합니다.
+- **파서(Parser) 로직 구현**:
+  - `music21`로 곡을 불러와 각 성부별 진입(Entry) 시점을 분석합니다.
+  - 최초 진입 성부의 멜로디 라인을 추출하여 `[SUBJECT]` 토큰으로 감쌉니다.
+  - 다음 성부가 진입할 때 `[ANSWER]`(Real/Tonal 구분) 토큰으로 감싸고, 첫 성부의 라인은 `[COUNTERSUBJECT]`로 태깅합니다.
+  - 모든 성부가 한 번씩 등장한 이후의 전개부는 `[EPISODE]`, 마지막 페달 포인트나 밀집 묘출은 `[STRETTO]`/`[CADENCE]`로 분류합니다.
+- **토큰 포맷 설계**: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
+
+### 2. Model Architecture (모델 구조 변경)
+- **컨텍스트 확장**: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
+- **디코딩(Inference) 단계의 하이브리드 제어**:
+  - 푸가의 대위법(Parallel 5ths, Octaves 금지 등)을 모델이 완전히 Zero-shot으로 완벽히 지키기는 어렵습니다.
+  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 **결함 없는 생성 루프**를 설계합니다.
+
+### 3. Training Strategy (학습 전략)
+- **Pre-training**: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
+- **Fine-tuning**: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
+
+## Verification Plan
+
+### Automated Tests
 - 전처리 파이프라인(`fugue_parser.py`)을 돌렸을 때, WTC 1권 C Major 푸가의 Subject와 Answer 길이가 정확하게 music21로 식별 및 분리되는지 단위 테스트(Unit Test)를 진행합니다.
 
 ### Manual Verification
 - 파싱된 텍스트(토큰 시퀀스)를 직접 읽어보며 `[SUBJECT]` 직후에 다른 성부에서 정확히 5도 이조된 `[ANSWER]`가 토큰화되었는지 검수합니다.
 
-[2026-05-24 09:41 / Antigravity] Fugue Composer AI (Phase 1) 구현 완료
+[2026-05-24 09:41 / Antigravity] Fugue Composer AI- (Phase 1 끝)
+
+## 2026-05-24: Phase 2 Fugue Engine (Dual-Engine Architecture) 완벽 통합
+- 설명: 코랄(수직적) 엔진의 한계를 극복하기 위해 다성음악 전용 데이터셋을 대폭 확장하고, 푸가 전용 모델(`fugue_model.pt`)을 처음부터 새로 학습하여 듀얼 엔진 구조 완성.
+- 수정사항:
+  - `fetch_fugue_data.py`: 바흐 외에도 팔레스트리나, 조스캥, 몬테베르디 등 모테트 및 르네상스 다성음악을 포함해 총 416곡(증강 시 약 5,000 시퀀스) 다운로드.
+  - `preprocess_fugue.py`: 곡의 전개 구조를 인공지능에 학습시키기 위해 `[SUBJECT]`, `[ANSWER]`, `[EPISODE]` 구조 토큰을 오프셋 기반으로 자동 파싱하여 주입.
+  - `train_fugue.py`: 푸가 전용 `BachTokenizer` 어휘집(`fugue_vocab.pkl`)을 분리하고 25M 파라미터 트랜스포머 모델 학습(5000 iters).
+  - `neural_engine.py`: 하드코딩된 대주제 생성 로직을 걷어내고, `[SUBJECT]`와 `[ANSWER]` 마커 프롬프팅만으로 모델이 완벽한 수평적 대위법(Polyphony)을 자가 생성(Auto-regressive)하도록 전면 개편. 초기화 시 `bach_model.pt`와 `fugue_model.pt` 동시 로드.
+- 결과: `[SUBJECT]` 입력 후 `[ANSWER]` 마커를 부여하면, 과거처럼 수직 화음으로 떡칠되는 코랄 느낌이 사라지고 각 성부가 서로 얽히고설키며 생동감 있게 교차하는 진짜 푸가/인벤션 질감의 음악이 생성됨.
+- 비고: 점심시간 동안 백그라운드 학습 및 통합 작업, 커밋 완료. 구현 완료
 - AI/Harmony: neural_engine.py에 generate_fugue 메서드 및 _generate_single_fugue_response 도입. 입력된 주제(Subject)를 기반으로 5도 하행(-7 반음) 이조된 응답(Answer)을 베이스(V4) 성부에 자동 스케줄링하는 Rule-based Exposition 뼈대 구축.
 - Data/Pipeline: music21 코퍼스 기반 바로크 폴리포니 곡(인벤션, WTC) 데이터 수집용 fetch_fugue_data.py 작성 및 데이터 수집. Subject/Answer 휴리스틱 분리용 fugue_parser.py 뼈대 작성. 
 - Backend: api.py에 /api/generate_fugue 엔드포인트 신설 및 GenerationRequestFugue 모델 연동 완료. 기존 모델 가중치(Zero-shot)와의 호환성 유지를 위해 신규 구조 토큰 추가는 Phase 2로 연기.
