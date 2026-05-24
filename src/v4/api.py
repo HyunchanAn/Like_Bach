@@ -49,6 +49,13 @@ class GenerationRequest(BaseModel):
     temperature: float = 0.8
     refine_iters: int = 3
 
+class GenerationRequestFugue(BaseModel):
+    subject_notes: List[Note]
+    target_measures: int = 16
+    temperature: float = 0.55  # Reduced from 0.8 for more stable/less chaotic Fugue generation
+    refine_iters: int = 3
+    voices: int = 2  # default Phase 1 invention is 2-part
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "engine_ready": engine is not None}
@@ -65,6 +72,31 @@ async def generate_bach(request: GenerationRequest):
         
         # AI 생성 수행 (target_measures 명시적 전달)
         generated_notes = engine.generate_response(
+            subject_notes=notes_dict,
+            target_measures=request.target_measures if request.target_measures > 0 else 8,
+            temperature=request.temperature,
+            refine_iters=request.refine_iters
+        )
+        
+        return {
+            "success": True,
+            "results": generated_notes
+        }
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/generate_fugue")
+async def generate_fugue_bach(request: GenerationRequestFugue):
+    global engine
+    if engine is None:
+        raise HTTPException(status_code=503, detail="AI Engine not initialized")
+    
+    try:
+        notes_dict = [n.dict() for n in request.subject_notes]
+        
+        generated_notes = engine.generate_fugue(
             subject_notes=notes_dict,
             target_measures=request.target_measures if request.target_measures > 0 else 8,
             temperature=request.temperature,

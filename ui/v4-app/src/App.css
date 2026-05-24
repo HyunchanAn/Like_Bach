@@ -217,3 +217,34 @@
   cursor: pointer;
 }
 
+/* Tooltip Styles */
+.tooltip-wrapper .tooltip-content {
+  visibility: hidden;
+  opacity: 0;
+  width: max-content;
+  max-width: 250px;
+  background-color: var(--bg-panel);
+  color: var(--text-main);
+  text-align: center;
+  border-radius: 8px;
+  padding: 10px 14px;
+  position: absolute;
+  z-index: 1000;
+  top: 150%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-5px);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  line-height: 1.4;
+}
+
+.tooltip-wrapper:hover .tooltip-content {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+

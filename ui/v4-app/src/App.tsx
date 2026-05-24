@@ -29,7 +29,8 @@ const App: React.FC = () => {
   });
 
   const [targetMeasures, setTargetMeasures] = useState(8);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [creativitySlider, setCreativitySlider] = useState(0.32); // 0 to 1 scale
+  const [generatingMode, setGeneratingMode] = useState<'none'|'choral'|'fugue'>('none');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const synthRef = useRef<Tone.PolySynth | null>(null);
@@ -75,16 +76,21 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // AI 작배 요청
-  const handleGenerate = async () => {
-    if (state.notes.length === 0) return;
+  // AI 작곡 요청
+  const handleGenerate = async (mode: 'choral' | 'fugue') => {
+    if (state.notes.length === 0) {
+      alert("먼저 오선지를 마우스로 클릭하여 한 개 이상의 음표(주제)를 입력해 주세요!");
+      return;
+    }
     
-    setIsGenerating(true);
+    setGeneratingMode(mode);
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/generate`, {
+      const actualTemperature = 0.1 + (creativitySlider * 1.4); // Scale 0~1 to 0.1~1.5
+      const endpoint = mode === 'choral' ? '/api/generate' : '/api/generate_fugue';
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
         subject_notes: state.notes.filter(n => n.voice === 1),
         target_measures: targetMeasures,
-        temperature: 0.8,
+        temperature: actualTemperature,
         refine_iters: 3
       });
         if (response.data.success) {
@@ -107,7 +113,7 @@ const App: React.FC = () => {
       console.error("AI Generation Error:", error);
       alert("백엔드 서버가 켜져 있는지 확인해 주세요.");
     } finally {
-      setIsGenerating(false);
+      setGeneratingMode('none');
     }
   };
 
@@ -262,15 +268,38 @@ const App: React.FC = () => {
         </div>
 
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
-          <div className="slider-group">
-            <label>Measures</label>
+          <div className="slider-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: 600 }}>Measures</label>
             <input 
-              type="range" min="4" max="32" step="4" 
+              type="range" min="4" max="64" step="4" 
               value={targetMeasures} 
               onChange={(e) => setTargetMeasures(parseInt(e.target.value))}
               style={{ width: '120px' }}
             />
             <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--accent)', minWidth: '30px', textAlign: 'center' }}>{targetMeasures}</span>
+          </div>
+
+          <div className="slider-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+              Creativity
+              <div className="tooltip-wrapper" style={{ position: 'relative', display: 'flex' }}>
+                <Info 
+                  size={14} 
+                  color="var(--text-main)" 
+                  style={{ opacity: 0.6, cursor: 'help' }} 
+                />
+                <div className="tooltip-content">
+                  0에 가까울수록 안정성/규칙준수, 1에 가까울수록 창의적이고 예측 불가능한 전개
+                </div>
+              </div>
+            </label>
+            <input 
+              type="range" min="0" max="1" step="0.01" 
+              value={creativitySlider} 
+              onChange={(e) => setCreativitySlider(parseFloat(e.target.value))}
+              style={{ width: '120px' }}
+            />
+            <span style={{ fontSize: '18px', fontWeight: '900', color: '#ec4899', minWidth: '40px', textAlign: 'center' }}>{creativitySlider.toFixed(2)}</span>
           </div>
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -282,11 +311,20 @@ const App: React.FC = () => {
               <CircleDot size={28} />
             </button>
             <button 
-              onClick={handleGenerate}
-              disabled={isGenerating}
+              onClick={() => handleGenerate('choral')}
+              disabled={generatingMode !== 'none'}
               className="compose-btn"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)', transition: 'transform 0.2s, box-shadow 0.2s' }}
             >
-              {isGenerating ? 'PROCESSING...' : 'AI COMPOSE'}
+              {generatingMode === 'choral' ? 'PROCESSING...' : 'CHORAL'}
+            </button>
+            <button 
+              onClick={() => handleGenerate('fugue')}
+              disabled={generatingMode !== 'none'}
+              className="compose-btn"
+              style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', boxShadow: '0 4px 15px rgba(236, 72, 153, 0.4)', transition: 'transform 0.2s, box-shadow 0.2s' }}
+            >
+              {generatingMode === 'fugue' ? 'PROCESSING...' : 'FUGUE'}
             </button>
           </div>
         </div>
@@ -367,8 +405,8 @@ const App: React.FC = () => {
           <footer className="studio-footer">
             <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div className={`status-dot ${isGenerating ? 'status-busy' : 'status-ready'}`}></div>
-                <span style={{ textTransform: 'uppercase' }}>{isGenerating ? 'AI Engine Processing' : 'Engine Ready'}</span>
+                <div className={`status-dot ${generatingMode !== 'none' ? 'status-busy' : 'status-ready'}`}></div>
+                <span style={{ textTransform: 'uppercase' }}>{generatingMode !== 'none' ? 'AI Engine Processing' : 'Engine Ready'}</span>
               </div>
               <span style={{ opacity: 0.2 }}>|</span>
               <span>PROGRESS: {Math.floor(state.currentTime / 4) + 1} / {targetMeasures} MEASURES</span>

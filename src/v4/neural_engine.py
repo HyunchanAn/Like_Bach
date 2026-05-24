@@ -89,6 +89,133 @@ class NeuralBachEngine:
                 
         return best_notes
 
+    def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
+        best_notes = None
+        best_score = -1.0
+        max_attempts = 5
+        threshold = 90.0
+        
+        for attempt in range(max_attempts):
+            notes = self._generate_single_fugue_response(subject_notes, target_measures, temperature, refine_iters)
+            score = self._evaluate_harmony(notes)
+            
+            if score >= threshold:
+                return notes
+                
+            if score > best_score:
+                best_score = score
+                best_notes = notes
+                
+        return best_notes
+
+    def _generate_single_fugue_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
+        raw_key = "C" 
+        current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]"]
+        last_measure_idx = -1
+        
+        if not subject_notes:
+            return []
+            
+        subject_end_off = max([float(n['offset']) + float(n['duration']) for n in subject_notes])
+        answer_start_off = float(int((subject_end_off + 3.99) // 4) * 4) 
+        
+        forced_notes = []
+        for n in subject_notes:
+            off = round(float(n['offset']), 3)
+            forced_notes.append({"offset": off, "pitch": int(n['pitch']), "duration": round(float(n['duration']), 3), "voice": "[V1]"})
+            ans_off = round(off + answer_start_off, 3)
+            ans_pitch = int(n['pitch']) - 7
+            forced_notes.append({"offset": ans_off, "pitch": ans_pitch, "duration": round(float(n['duration']), 3), "voice": "[V4]"})
+            
+        forced_notes.sort(key=lambda x: (x['offset'], x['voice']))
+        
+        curr_measure = 0
+        current_offset = 0.0
+        
+        # 1. 전시부(Exposition) 뼈대 삽입 및 대주제(Countersubject) 유도
+        for fn in forced_notes:
+            off = fn['offset']
+            if off >= target_measures * 4.0: break
+            curr_measure = int(off // 4)
+            
+            if curr_measure > last_measure_idx:
+                remain = max(0, target_measures - curr_measure)
+                current_seq.append(f"[REMAIN_{remain}]")
+                last_measure_idx = curr_measure
+                self._inject_roman_token(current_seq, temperature)
+            
+            if off > current_offset or current_offset == 0.0:
+                current_seq.append(f"[TIME_{off}]")
+                current_offset = off
+            
+            v = fn['voice']
+            p = fn['pitch']
+            d = fn['duration']
+            current_seq.append(f"{v} P{p} D{d}")
+            
+            # 전시부(Exposition) 뼈대가 삽입된 후 빈 성부를 AI가 채우도록 함
+            # Subject(V1)가 연주될 때는 하성이 쉬고, Answer(V4)가 연주될 때 V1이 Countersubject 생성
+            if v == "[V4]":
+                self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]"], p)
+                
+        # 2. AI 자유 작곡 (Continuation - Episode)
+        max_new_tokens = 2000
+        for _ in range(max_new_tokens):
+            if curr_measure >= target_measures:
+                break
+                
+            try:
+                current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
+                logits, _ = self.model(current_idx[:, -BLOCK_SIZE:])
+                
+                if curr_measure >= target_measures - 1:
+                    f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
+                    if f_idx != -1: logits[0, -1, f_idx] += 2.0
+                
+                active_pitches = self._get_active_pitches_at_current_time(current_seq)
+                if active_pitches:
+                    bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
+                    if bad_indices: logits[0, -1, bad_indices] = -1e9
+                
+                active_voices = self._get_active_voices_at_current_time(current_seq)
+                if active_voices:
+                    bad_voice_indices = [tid for tid, voice in self.token_voices.items() if voice in active_voices]
+                    if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
+                
+                if curr_measure < target_measures - 1:
+                    bad_dur_indices = [tid for tid, dur in self.token_durations.items() if abs(dur - 4.0) < 0.001]
+                    if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
+                    
+                probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
+                idx_next = torch.multinomial(probs, num_samples=1)
+                token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+                
+                if token == "[FINAL]":
+                    if curr_measure >= target_measures:
+                        current_seq.append(token)
+                        break
+                    else:
+                        probs[0, idx_next.item()] = 0.0
+                        idx_next = torch.multinomial(probs, num_samples=1)
+                        token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+ 
+                current_seq.append(token)
+                
+                if token.startswith("[TIME_"):
+                    try:
+                        off = float(token[6:-1])
+                        curr_measure = int(off // 4)
+                    except: pass
+                    
+            except Exception as e:
+                break
+ 
+        if refine_iters > 0:
+            current_seq = self._refine_sequence(current_seq, refine_iters, temperature)
+ 
+        notes = self._parse_tokens_to_notes(current_seq)
+        return self._fix_silence_gaps(notes, target_measures * 4.0)
+
     def _generate_single_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         raw_key = "C" 
         current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]"]

@@ -348,3 +348,8 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 ### Manual Verification
 - 파싱된 텍스트(토큰 시퀀스)를 직접 읽어보며 `[SUBJECT]` 직후에 다른 성부에서 정확히 5도 이조된 `[ANSWER]`가 토큰화되었는지 검수합니다.
 
+[2026-05-24 09:41 / Antigravity] Fugue Composer AI (Phase 1) 구현 완료
+- AI/Harmony: neural_engine.py에 generate_fugue 메서드 및 _generate_single_fugue_response 도입. 입력된 주제(Subject)를 기반으로 5도 하행(-7 반음) 이조된 응답(Answer)을 베이스(V4) 성부에 자동 스케줄링하는 Rule-based Exposition 뼈대 구축.
+- Data/Pipeline: music21 코퍼스 기반 바로크 폴리포니 곡(인벤션, WTC) 데이터 수집용 fetch_fugue_data.py 작성 및 데이터 수집. Subject/Answer 휴리스틱 분리용 fugue_parser.py 뼈대 작성. 
+- Backend: api.py에 /api/generate_fugue 엔드포인트 신설 및 GenerationRequestFugue 모델 연동 완료. 기존 모델 가중치(Zero-shot)와의 호환성 유지를 위해 신규 구조 토큰 추가는 Phase 2로 연기.
+- UI/Frontend: App.tsx 내에 기존 CHORAL 생성 버튼과 나란히 FUGUE 버튼을 배치하여, 사용자가 직관적으로 다성부 대위법 생성을 요청할 수 있도록 지원 완료.
