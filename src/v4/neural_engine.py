@@ -52,16 +52,16 @@ class NeuralBachEngine:
         self.token_durations = {}
         self.bad_pitch_indices = []
         
-        # 각 성부별 허용 음역대 (정확히 2옥타브 = 24반음)
-        # Soprano(V1): C4(60) ~ C6(84)
-        # Alto(V2): G3(55) ~ G5(79)
-        # Tenor(V3): C3(48) ~ C5(72)
-        # Bass(V4): E2(40) ~ E4(64)
+        # 성부별 허용 음역대를 더 엄격하게 제한 (시각적으로 너무 높은 덧줄이 생기지 않도록)
+        # Soprano(V1): C4(60) ~ A5(81)
+        # Alto(V2): F3(53) ~ D5(74)
+        # Tenor(V3): A2(45) ~ G4(67)
+        # Bass(V4): E2(40) ~ C4(60)
         allowed_ranges = {
-            "[V1]": (60, 84),
-            "[V2]": (55, 79),
-            "[V3]": (48, 72),
-            "[V4]": (40, 64)
+            "[V1]": (60, 81),
+            "[V2]": (53, 74),
+            "[V3]": (45, 67),
+            "[V4]": (40, 60)
         }
         
         for token, token_id in self.tokenizer.stoi.items():
@@ -73,18 +73,35 @@ class NeuralBachEngine:
                     if len(parts) >= 2 and parts[1].startswith("P"):
                         pitch_val = int(parts[1][1:])
                         self.token_pitches[token_id] = pitch_val
-                        
-                        # 2옥타브 범위를 벗어나는 토큰은 미리 bad_pitch_indices에 추가
                         if v in allowed_ranges:
                             min_p, max_p = allowed_ranges[v]
                             if pitch_val < min_p or pitch_val > max_p:
                                 self.bad_pitch_indices.append(token_id)
-                                
                     if len(parts) >= 3 and parts[2].startswith("D"):
-                        dur_val = float(parts[2][1:])
-                        self.token_durations[token_id] = dur_val
-                except:
-                    pass
+                        self.token_durations[token_id] = float(parts[2][1:])
+                except: pass
+
+        self.fugue_token_pitches = {}
+        self.fugue_token_voices = {}
+        self.fugue_token_durations = {}
+        self.fugue_bad_pitch_indices = []
+        
+        for token, token_id in self.fugue_tokenizer.stoi.items():
+            if token.startswith("[V"):
+                self.fugue_token_voices[token_id] = token[:4]
+                v = token[:4]
+                try:
+                    parts = token.split()
+                    if len(parts) >= 2 and parts[1].startswith("P"):
+                        pitch_val = int(parts[1][1:])
+                        self.fugue_token_pitches[token_id] = pitch_val
+                        if v in allowed_ranges:
+                            min_p, max_p = allowed_ranges[v]
+                            if pitch_val < min_p or pitch_val > max_p:
+                                self.fugue_bad_pitch_indices.append(token_id)
+                    if len(parts) >= 3 and parts[2].startswith("D"):
+                        self.fugue_token_durations[token_id] = float(parts[2][1:])
+                except: pass
 
     def _get_active_pitches_at_current_time(self, current_seq):
         active_pitches = set()
@@ -128,14 +145,17 @@ class NeuralBachEngine:
                 
         return best_notes
 
-    def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
+    def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
         best_notes = None
         best_score = -1.0
         max_attempts = 5
         threshold = 90.0
         
         for attempt in range(max_attempts):
-            notes = self._generate_single_fugue_response(subject_notes, target_measures, temperature, refine_iters)
+            if stream_queue and attempt > 0:
+                stream_queue.put({"type": "retry", "attempt": attempt + 1})
+                
+            notes = self._generate_single_fugue_response(subject_notes, target_measures, temperature, refine_iters, stream_queue)
             score = self._evaluate_harmony(notes)
             
             if score >= threshold:
@@ -147,8 +167,8 @@ class NeuralBachEngine:
                 
         return best_notes
 
-    def _generate_single_fugue_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
-        raw_key = "C" 
+    def _generate_single_fugue_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
+        raw_key = "C"  
         current_seq = [f"[KEY_{raw_key}]", "[TS_4/4]", "[SUBJECT]"]
         last_measure_idx = -1
         
@@ -219,30 +239,30 @@ class NeuralBachEngine:
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
                 # 1. 2옥타브 범위 이탈 토큰 원천 차단
-                if self.bad_pitch_indices:
-                    logits[0, -1, self.bad_pitch_indices] = -1e9
+                if self.fugue_bad_pitch_indices:
+                    logits[0, -1, self.fugue_bad_pitch_indices] = -1e9
                 
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
-                    bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
+                    bad_indices = [tid for tid, p in self.fugue_token_pitches.items() if p in active_pitches]
                     if bad_indices: logits[0, -1, bad_indices] = -1e9
                 
                 active_voices = self._get_active_voices_at_current_time(current_seq)
                 if active_voices:
-                    bad_voice_indices = [tid for tid, voice in self.token_voices.items() if voice in active_voices]
+                    bad_voice_indices = [tid for tid, voice in self.fugue_token_voices.items() if voice in active_voices]
                     if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
                 
                 # 질질 끄는 음표 방지: 온음표(D4.0) 및 점2분음표(D3.0) 억제, 그리고 직전과 완전히 동일한 노트 반복 시 강력한 페널티
                 if curr_measure < target_measures - 1:
-                    bad_dur_indices = [tid for tid, dur in self.token_durations.items() if dur >= 3.0]
+                    bad_dur_indices = [tid for tid, dur in self.fugue_token_durations.items() if dur >= 3.0]
                     if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
                     
-                # Repetition Penalty (연속으로 똑같은 음표/길이를 반복하는 버그 억제)
+                # Repetition Penalty
                 last_few_tokens = current_seq[-10:]
                 for tid in range(logits.shape[-1]):
                     tok = self.fugue_tokenizer.itos.get(tid, "")
                     if tok.startswith("[V") and tok in last_few_tokens:
-                        logits[0, -1, tid] -= 5.0  # 강력한 페널티 부여
+                        logits[0, -1, tid] -= 5.0
                     
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
@@ -258,6 +278,9 @@ class NeuralBachEngine:
                         token = self.fugue_tokenizer.itos.get(idx_next.item(), "[UNK]")
  
                 current_seq.append(token)
+                
+                if stream_queue and len(current_seq) % 5 == 0:
+                    stream_queue.put({"type": "chunk", "notes": self._parse_tokens_to_notes(current_seq)})
                 
                 if token.startswith("[TIME_"):
                     try:
@@ -414,6 +437,11 @@ class NeuralBachEngine:
         model = self.fugue_model if use_fugue_model else self.model
         tokenizer = self.fugue_tokenizer if use_fugue_model else self.tokenizer
         
+        t_pitches = self.fugue_token_pitches if use_fugue_model else self.token_pitches
+        t_voices = self.fugue_token_voices if use_fugue_model else self.token_voices
+        t_durations = self.fugue_token_durations if use_fugue_model else self.token_durations
+        t_bad_pitch = self.fugue_bad_pitch_indices if use_fugue_model else self.bad_pitch_indices
+        
         for retry in range(15):
             try:
                 current_idx = torch.tensor([tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
@@ -423,21 +451,21 @@ class NeuralBachEngine:
                     f_idx = tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
-                if self.bad_pitch_indices:
-                    logits[0, -1, self.bad_pitch_indices] = -1e9
+                if t_bad_pitch:
+                    logits[0, -1, t_bad_pitch] = -1e9
                 
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
-                    bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
+                    bad_indices = [tid for tid, p in t_pitches.items() if p in active_pitches]
                     if bad_indices: logits[0, -1, bad_indices] = -1e9
                 
                 active_voices = self._get_active_voices_at_current_time(current_seq)
                 if active_voices:
-                    bad_voice_indices = [tid for tid, v in self.token_voices.items() if v in active_voices]
+                    bad_voice_indices = [tid for tid, v in t_voices.items() if v in active_voices]
                     if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
                 
                 if curr_measure < target_measures - 1:
-                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if d >= 3.0]
+                    bad_dur_indices = [tid for tid, d in t_durations.items() if d >= 3.0]
                     if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
                 
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
@@ -466,7 +494,7 @@ class NeuralBachEngine:
         return full_seq # Refinement temporarily disabled for stability # Refinement temporarily disabled for stability
 
     def _parse_tokens_to_notes(self, tokens):
-        notes = []
+        raw_notes = []
         current_offset = 0.0
         seen_notes = set() # (voice, offset) 중복 방지
         
@@ -483,9 +511,35 @@ class NeuralBachEngine:
                     
                     key = (v_num, round(current_offset, 3))
                     if key not in seen_notes:
-                        notes.append({"pitch": p, "duration": d, "offset": current_offset, "voice": v_num})
+                        raw_notes.append({"pitch": p, "duration": d, "offset": current_offset, "voice": v_num})
                         seen_notes.add(key)
                 except: pass
+                
+        notes = []
+        BEATS_PER_MEASURE = 4.0
+        # 마디(Barline)를 넘어가는 긴 음표를 두 개의 독립된 음표로 강제 분리(Split)하여 
+        # 타이가 아닌 각각 타건(Articulated)되도록 수정합니다.
+        for n in raw_notes:
+            off = n["offset"]
+            rem_dur = n["duration"]
+            p = n["pitch"]
+            v = n["voice"]
+            
+            while rem_dur > 0.001:
+                measure_idx = int(off // BEATS_PER_MEASURE)
+                measure_end = (measure_idx + 1) * BEATS_PER_MEASURE
+                dur_in_measure = min(rem_dur, measure_end - off)
+                
+                notes.append({
+                    "pitch": p, 
+                    "duration": round(dur_in_measure, 3), 
+                    "offset": round(off, 3), 
+                    "voice": v
+                })
+                
+                off += dur_in_measure
+                rem_dur -= dur_in_measure
+                
         return notes
 
     def _fix_silence_gaps(self, notes, max_time):

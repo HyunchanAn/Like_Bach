@@ -89,33 +89,80 @@ const App: React.FC = () => {
     setGeneratingMode(mode);
     try {
       const actualTemperature = 0.1 + (creativitySlider * 1.4); // Scale 0~1 to 0.1~1.5
-      const endpoint = mode === 'choral' ? '/api/generate' : '/api/generate_fugue';
-      const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
-        subject_notes: state.notes.filter(n => n.voice === 1),
-        target_measures: targetMeasures,
-        temperature: actualTemperature,
-        refine_iters: 3
-      });
+      
+      if (mode === 'choral') {
+        const response = await axios.post(`${API_BASE_URL}/api/generate`, {
+          subject_notes: state.notes.filter(n => n.voice === 1),
+          target_measures: targetMeasures,
+          temperature: actualTemperature,
+          refine_iters: 3
+        });
         if (response.data.success) {
-          // AI 엔진은 사용자의 초기 입력(Soprano)을 포함하여 
-          // 곡 전체(Soprano, Alto, Tenor, Bass)를 토큰 시퀀스로부터 디코딩해 반환합니다.
-          // 따라서 voice === 1을 필터링할 필요 없이 반환받은 전체 노트를 그대로 사용합니다.
           const aiNotes: NoteData[] = response.data.results.map((n: any) => ({
             id: Math.random().toString(36).substr(2, 9),
             pitch: n.pitch,
             duration: n.duration,
             offset: n.offset,
             voice: n.voice as 1|2|3|4,
-            durationType: n.duration === 1.0 ? 4 : (n.duration === 2.0 ? 2 : (n.duration === 4.0 ? 1 : 8))
+            durationType: n.duration >= 4.0 ? 1 : (n.duration >= 2.0 ? 2 : (n.duration >= 1.0 ? 4 : 8))
           }));
-          
-          // 전체 악보 덮어쓰기
           engineRef.current?.setNotes(aiNotes);
+          if (response.data.midi_base64) setMidiData(response.data.midi_base64);
+        }
+      } else {
+        // SSE Streaming for Fugue
+        const response = await fetch(`${API_BASE_URL}/api/stream_fugue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject_notes: state.notes.filter(n => n.voice === 1),
+            target_measures: targetMeasures,
+            temperature: actualTemperature,
+            refine_iters: 3
+          })
+        });
+        
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || "";
           
-          if (response.data.midi_base64) {
-            setMidiData(response.data.midi_base64);
+          for (const part of parts) {
+            if (part.startsWith('data: ')) {
+              const jsonStr = part.slice(6);
+              try {
+                const data = JSON.parse(jsonStr);
+                if (data.type === 'chunk' || data.type === 'done') {
+                  const aiNotes: NoteData[] = data.notes.map((n: any) => ({
+                    id: Math.random().toString(36).substr(2, 9),
+                    pitch: n.pitch,
+                    duration: n.duration,
+                    offset: n.offset,
+                    voice: n.voice as 1|2|3|4,
+                    durationType: n.duration >= 4.0 ? 1 : (n.duration >= 2.0 ? 2 : (n.duration >= 1.0 ? 4 : 8))
+                  }));
+                  engineRef.current?.setNotes(aiNotes);
+                  if (data.type === 'done' && data.midi_base64) {
+                    setMidiData(data.midi_base64);
+                  }
+                } else if (data.type === 'retry') {
+                  // Retry animation: Keep only the subject and clear the rest
+                  engineRef.current?.setNotes(state.notes.filter(n => n.voice === 1));
+                } else if (data.type === 'error') {
+                  console.error("Stream Error:", data.message);
+                }
+              } catch (e) {}
+            }
           }
         }
+      }
     } catch (error) {
       console.error("AI Generation Error:", error);
       alert("백엔드 서버가 켜져 있는지 확인해 주세요.");

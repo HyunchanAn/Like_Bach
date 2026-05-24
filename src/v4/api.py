@@ -2,9 +2,14 @@ import os
 import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict
 import base64
+import queue
+import threading
+import json
+import asyncio
 from music21 import stream, note, tempo, meter, key
 
 def notes_to_midi_base64(notes_list, filename="temp_output.mid"):
@@ -112,37 +117,54 @@ async def generate_bach(request: GenerationRequest):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/generate_fugue")
-async def generate_fugue_bach(request: GenerationRequestFugue):
+@app.post("/api/stream_fugue")
+async def stream_fugue_bach(request: GenerationRequestFugue):
     global engine
     if engine is None:
         raise HTTPException(status_code=503, detail="AI Engine not initialized")
     
-    try:
-        notes_dict = [n.dict() for n in request.subject_notes]
-        
-        # 1. 사용자의 입력 테마를 temp_input.mid 로 저장
-        notes_to_midi_base64(notes_dict, "temp_input.mid")
-        
-        generated_notes = engine.generate_fugue(
-            subject_notes=notes_dict,
-            target_measures=request.target_measures if request.target_measures > 0 else 8,
-            temperature=request.temperature,
-            refine_iters=request.refine_iters
-        )
-        
-        # 2. 작곡된 결과를 temp_output.mid 로 저장 후 Base64로 인코딩하여 프론트엔드로 전달
-        midi_b64 = notes_to_midi_base64(generated_notes, "temp_output.mid")
-        
-        return {
-            "success": True,
-            "results": generated_notes,
-            "midi_base64": midi_b64
-        }
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+    notes_dict = [n.dict() for n in request.subject_notes]
+    target_m = request.target_measures if request.target_measures > 0 else 8
+    
+    stream_q = queue.Queue()
+    
+    def generate_worker():
+        try:
+            notes_to_midi_base64(notes_dict, "temp_input.mid")
+            
+            final_notes = engine.generate_fugue(
+                subject_notes=notes_dict,
+                target_measures=target_m,
+                temperature=request.temperature,
+                refine_iters=request.refine_iters,
+                stream_queue=stream_q
+            )
+            
+            midi_b64 = notes_to_midi_base64(final_notes, "temp_output.mid")
+            
+            stream_q.put({
+                "type": "done",
+                "notes": final_notes,
+                "midi_base64": midi_b64
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            stream_q.put({"type": "error", "message": str(e)})
+            
+    threading.Thread(target=generate_worker, daemon=True).start()
+    
+    async def event_generator():
+        while True:
+            try:
+                msg = stream_q.get_nowait()
+                yield f"data: {json.dumps(msg)}\n\n"
+                if msg.get("type") in ["done", "error"]:
+                    break
+            except queue.Empty:
+                await asyncio.sleep(0.05)
+                
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
