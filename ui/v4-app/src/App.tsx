@@ -8,7 +8,8 @@ import {
   Keyboard,
   Info,
   Sun,
-  Moon
+  Moon,
+  Download
 } from 'lucide-react';
 import axios from 'axios';
 import * as Tone from 'tone';
@@ -33,6 +34,8 @@ const App: React.FC = () => {
   const [generatingMode, setGeneratingMode] = useState<'none'|'choral'|'fugue'>('none');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [midiData, setMidiData] = useState<string | null>(null);
+  
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const engineRef = useRef<NWCKeyboardEngine | null>(null);
 
@@ -108,6 +111,10 @@ const App: React.FC = () => {
           
           // 전체 악보 덮어쓰기
           engineRef.current?.setNotes(aiNotes);
+          
+          if (response.data.midi_base64) {
+            setMidiData(response.data.midi_base64);
+          }
         }
     } catch (error) {
       console.error("AI Generation Error:", error);
@@ -239,6 +246,7 @@ const App: React.FC = () => {
 
   const clearScore = () => {
     engineRef.current?.setNotes([]);
+    setMidiData(null);
   };
 
   return (
@@ -303,6 +311,22 @@ const App: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              onClick={() => {
+                if (midiData) {
+                  const link = document.createElement('a');
+                  link.href = `data:audio/midi;base64,${midiData}`;
+                  link.download = "fugue_output.mid";
+                  link.click();
+                }
+              }}
+              className="nwc-btn"
+              disabled={!midiData}
+              title="Download MIDI File"
+              style={{ borderRadius: '16px', background: 'var(--bg-main)', color: midiData ? 'var(--text-main)' : 'gray', border: '2px solid var(--border)', opacity: midiData ? 1 : 0.5 }}
+            >
+              <Download size={24} />
+            </button>
             <button 
               onClick={handlePlay}
               className="nwc-btn"

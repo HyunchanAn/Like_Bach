@@ -554,6 +554,14 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
   - `neural_engine.py`: 하드코딩된 대주제 생성 로직을 걷어내고, `[SUBJECT]`와 `[ANSWER]` 마커 프롬프팅만으로 모델이 완벽한 수평적 대위법(Polyphony)을 자가 생성(Auto-regressive)하도록 전면 개편. 초기화 시 `bach_model.pt`와 `fugue_model.pt` 동시 로드.
 - 결과: `[SUBJECT]` 입력 후 `[ANSWER]` 마커를 부여하면, 과거처럼 수직 화음으로 떡칠되는 코랄 느낌이 사라지고 각 성부가 서로 얽히고설키며 생동감 있게 교차하는 진짜 푸가/인벤션 질감의 음악이 생성됨.
 - 비고: 점심시간 동안 백그라운드 학습 및 통합 작업, 커밋 완료. 구현 완료
+
+## 2026-05-24: Phase 3 MIDI 파일 입출력 파이프라인 및 푸가 알고리즘 롤백
+- 배경: 사용자 피드백 결과 "의미 없이 무한대로 한 음을 길게 끄는 현상" 및 "입력한 주제(Subject)를 한 번도 모방(Answer)하지 않는 현상" 발견. 또한 NWC2 등 외부 악보 프로그램 호환성을 위한 MIDI 파이프라인 개편 요구됨.
+- 수정사항:
+  - `neural_engine.py`: Phase 1에서 사용했던 "강제 5도 하행 이조(Rule-based Exposition)" 스케줄링을 복구하여, 소프라노(V1)의 주제를 베이스(V4)가 무조건 모방하도록 하드코딩. 그 외 빈 구간(대주제 및 전개부)은 `fugue_model.pt`가 자가 생성하도록 결합(Hybrid)함.
+  - `neural_engine.py`: 무한 지속음 버그의 원인인 `_fix_silence_gaps`의 음표 연장 로직을 비활성화하고 자연스러운 쉼표(Rests) 허용.
+  - `api.py`: `music21`을 사용하여 입력 테마를 `temp_input.mid`로, 생성된 다성부 결과를 `temp_output.mid`로 디스크에 컴파일 후, Base64 문자열로 인코딩하여 프론트엔드로 전송.
+  - `App.tsx`: Base64 MIDI 문자열을 받아오는 로직을 추가하고, 화면 상단에 NWC2 등에서 열 수 있는 `Download MIDI` 버튼 신설.
 - AI/Harmony: neural_engine.py에 generate_fugue 메서드 및 _generate_single_fugue_response 도입. 입력된 주제(Subject)를 기반으로 5도 하행(-7 반음) 이조된 응답(Answer)을 베이스(V4) 성부에 자동 스케줄링하는 Rule-based Exposition 뼈대 구축.
 - Data/Pipeline: music21 코퍼스 기반 바로크 폴리포니 곡(인벤션, WTC) 데이터 수집용 fetch_fugue_data.py 작성 및 데이터 수집. Subject/Answer 휴리스틱 분리용 fugue_parser.py 뼈대 작성. 
 - Backend: api.py에 /api/generate_fugue 엔드포인트 신설 및 GenerationRequestFugue 모델 연동 완료. 기존 모델 가중치(Zero-shot)와의 호환성 유지를 위해 신규 구조 토큰 추가는 Phase 2로 연기.

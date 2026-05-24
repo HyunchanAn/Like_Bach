@@ -4,6 +4,31 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict
+import base64
+from music21 import stream, note, tempo, meter, key
+
+def notes_to_midi_base64(notes_list, filename="temp_output.mid"):
+    s = stream.Score()
+    s.insert(0, tempo.MetronomeMark(number=120))
+    s.insert(0, meter.TimeSignature('4/4'))
+    s.insert(0, key.Key('C'))
+    
+    parts = {1: stream.Part(), 2: stream.Part(), 3: stream.Part(), 4: stream.Part()}
+    for v in parts.values():
+        s.insert(0, v)
+        
+    for n in notes_list:
+        m21_note = note.Note(n['pitch'])
+        m21_note.quarterLength = n['duration']
+        parts[n['voice']].insert(n['offset'], m21_note)
+        
+    s.write('midi', fp=filename)
+    try:
+        with open(filename, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode('utf-8')
+        return b64
+    except:
+        return ""
 
 # Project root 추가
 sys.path.append(os.getcwd())
@@ -96,6 +121,9 @@ async def generate_fugue_bach(request: GenerationRequestFugue):
     try:
         notes_dict = [n.dict() for n in request.subject_notes]
         
+        # 1. 사용자의 입력 테마를 temp_input.mid 로 저장
+        notes_to_midi_base64(notes_dict, "temp_input.mid")
+        
         generated_notes = engine.generate_fugue(
             subject_notes=notes_dict,
             target_measures=request.target_measures if request.target_measures > 0 else 8,
@@ -103,9 +131,13 @@ async def generate_fugue_bach(request: GenerationRequestFugue):
             refine_iters=request.refine_iters
         )
         
+        # 2. 작곡된 결과를 temp_output.mid 로 저장 후 Base64로 인코딩하여 프론트엔드로 전달
+        midi_b64 = notes_to_midi_base64(generated_notes, "temp_output.mid")
+        
         return {
             "success": True,
-            "results": generated_notes
+            "results": generated_notes,
+            "midi_base64": midi_b64
         }
     except Exception as e:
         import traceback

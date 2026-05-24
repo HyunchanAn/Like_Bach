@@ -140,13 +140,16 @@ class NeuralBachEngine:
         for n in subject_notes:
             off = round(float(n['offset']), 3)
             forced_notes.append({"offset": off, "pitch": int(n['pitch']), "duration": round(float(n['duration']), 3), "voice": "[V1]"})
+            ans_off = round(off + answer_start_off, 3)
+            ans_pitch = int(n['pitch']) - 7
+            forced_notes.append({"offset": ans_off, "pitch": ans_pitch, "duration": round(float(n['duration']), 3), "voice": "[V4]"})
             
         forced_notes.sort(key=lambda x: (x['offset'], x['voice']))
         
         curr_measure = 0
         current_offset = 0.0
         
-        # 1. Phase 2: Inject only the subject, and prompt with [ANSWER]
+        # 1. Phase 3: 강제 5도 이조 (Rule-based Exposition) + 푸가 대위법 결합
         for fn in forced_notes:
             off = fn['offset']
             if off >= target_measures * 4.0: break
@@ -164,10 +167,20 @@ class NeuralBachEngine:
             v = fn['voice']
             p = fn['pitch']
             d = fn['duration']
+            
+            # [SUBJECT] 및 [ANSWER] 마커 주입
+            if off == 0.0 and v == "[V1]":
+                current_seq.append("[SUBJECT]")
+            elif off == answer_start_off and v == "[V4]":
+                current_seq.append("[ANSWER]")
+                
             current_seq.append(f"{v} P{p} D{d}")
+            
+            # Answer가 연주될 때 AI가 빈 성부(Countersubject)를 채우도록 유도
+            if v == "[V4]":
+                self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]", "[V2]", "[V3]"], p, use_fugue_model=True)
 
-        # Inject [ANSWER] prompt to trigger auto-regressive polyphony
-        current_seq.append("[ANSWER]")
+        current_seq.append("[EPISODE]")
                 
         # 2. AI 자유 작곡 (Continuation - Episode)
         max_new_tokens = 2000
@@ -342,41 +355,46 @@ class NeuralBachEngine:
                     break
         except: pass
 
-    def _fill_voices(self, current_seq, target_measures, curr_measure, temperature, required_voices, base_pitch):
+        # 누락 성부 강제 할당 (Collision 방지 및 유니즌 방지)
+        for v in required_voices:
+            if v not in found_voices:
+                active_pitches = self._get_active_pitches_at_current_time(current_seq)
+                candidate_pitch = base_pitch - (12 if v != "[V1]" else 0)
+                while candidate_pitch in active_pitches:
+                    candidate_pitch -= 12
+                current_seq.append(f"{v} P{candidate_pitch} D0.5")
+
+    def _fill_voices(self, current_seq, target_measures, curr_measure, temperature, required_voices, base_pitch, use_fugue_model=False):
         found_voices = []
+        model = self.fugue_model if use_fugue_model else self.model
+        tokenizer = self.fugue_tokenizer if use_fugue_model else self.tokenizer
+        
         for retry in range(15):
             try:
-                current_idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
-                logits, _ = self.model(current_idx[:, -BLOCK_SIZE:])
+                current_idx = torch.tensor([tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
+                logits, _ = model(current_idx[:, -BLOCK_SIZE:])
                 
-                # 목표 마디 끝에 도달했을 때 FINAL 유도
                 if curr_measure >= target_measures:
-                    f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
+                    f_idx = tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
-                # 유니즌 방지 마스킹
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
                     bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
-                    if bad_indices:
-                        logits[0, -1, bad_indices] = -1e9
+                    if bad_indices: logits[0, -1, bad_indices] = -1e9
                 
-                # 성부 중복 방지 마스킹
                 active_voices = self._get_active_voices_at_current_time(current_seq)
                 if active_voices:
                     bad_voice_indices = [tid for tid, v in self.token_voices.items() if v in active_voices]
-                    if bad_voice_indices:
-                        logits[0, -1, bad_voice_indices] = -1e9
+                    if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
                 
-                # 온음표(Whole note, D4.0) 억제 (종지부 제외)
                 if curr_measure < target_measures - 1:
                     bad_dur_indices = [tid for tid, d in self.token_durations.items() if abs(d - 4.0) < 0.001]
-                    if bad_dur_indices:
-                        logits[0, -1, bad_dur_indices] = -1e9
+                    if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
                 
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
-                token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
+                token = tokenizer.itos.get(idx_next.item(), "[UNK]")
                 
                 prefix = token[:4]
                 if prefix in required_voices and prefix not in found_voices:
@@ -388,7 +406,6 @@ class NeuralBachEngine:
                 if len(found_voices) == len(required_voices): break
             except: break
                 
-        # 누락 성부 강제 할당 (Collision 방지 및 유니즌 방지)
         for v in required_voices:
             if v not in found_voices:
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
@@ -424,41 +441,8 @@ class NeuralBachEngine:
         return notes
 
     def _fix_silence_gaps(self, notes, max_time):
-        if not notes:
-            return notes
-            
-        step = 0.125
-        t = 0.0
-        
-        voice_notes = {1: [], 2: [], 3: [], 4: []}
-        for n in notes:
-            voice_notes[n["voice"]].append(n)
-            
-        for v in [1, 2, 3, 4]:
-            voice_notes[v].sort(key=lambda x: x["offset"])
-            
-        while t < max_time:
-            active_count = 0
-            for v in [1, 2, 3, 4]:
-                for n in voice_notes[v]:
-                    if n["offset"] - 0.001 <= t < n["offset"] + n["duration"] - 0.001:
-                        active_count += 1
-                        break
-            
-            if active_count == 0:
-                # Silence detected at time t! Extend the last played note for each voice.
-                for v in [1, 2, 3, 4]:
-                    last_note = None
-                    for n in voice_notes[v]:
-                        if n["offset"] + n["duration"] - 0.001 <= t:
-                            last_note = n
-                    
-                    if last_note is not None:
-                        new_dur = t + step - last_note["offset"]
-                        last_note["duration"] = round(new_dur, 3)
-                        
-            t += step
-            
+        # 무한 지속음 버그의 원인이 된 로직을 비활성화하고, 자연스러운 쉼표(Rests)를 허용합니다.
+        # 음표를 늘리는 대신 원본 노트 그대로 반환하여 악보 상에서 빈 공간이 Rests로 올바르게 표시되도록 합니다.
         return notes
 
     def _evaluate_harmony(self, notes):
