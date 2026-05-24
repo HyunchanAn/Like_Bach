@@ -50,14 +50,36 @@ class NeuralBachEngine:
         self.token_pitches = {}
         self.token_voices = {}
         self.token_durations = {}
+        self.bad_pitch_indices = []
+        
+        # 각 성부별 허용 음역대 (정확히 2옥타브 = 24반음)
+        # Soprano(V1): C4(60) ~ C6(84)
+        # Alto(V2): G3(55) ~ G5(79)
+        # Tenor(V3): C3(48) ~ C5(72)
+        # Bass(V4): E2(40) ~ E4(64)
+        allowed_ranges = {
+            "[V1]": (60, 84),
+            "[V2]": (55, 79),
+            "[V3]": (48, 72),
+            "[V4]": (40, 64)
+        }
+        
         for token, token_id in self.tokenizer.stoi.items():
             if token.startswith("[V"):
                 self.token_voices[token_id] = token[:4]
+                v = token[:4]
                 try:
                     parts = token.split()
                     if len(parts) >= 2 and parts[1].startswith("P"):
                         pitch_val = int(parts[1][1:])
                         self.token_pitches[token_id] = pitch_val
+                        
+                        # 2옥타브 범위를 벗어나는 토큰은 미리 bad_pitch_indices에 추가
+                        if v in allowed_ranges:
+                            min_p, max_p = allowed_ranges[v]
+                            if pitch_val < min_p or pitch_val > max_p:
+                                self.bad_pitch_indices.append(token_id)
+                                
                     if len(parts) >= 3 and parts[2].startswith("D"):
                         dur_val = float(parts[2][1:])
                         self.token_durations[token_id] = dur_val
@@ -196,6 +218,10 @@ class NeuralBachEngine:
                     f_idx = self.fugue_tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
+                # 1. 2옥타브 범위 이탈 토큰 원천 차단
+                if self.bad_pitch_indices:
+                    logits[0, -1, self.bad_pitch_indices] = -1e9
+                
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
                     bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
@@ -206,9 +232,17 @@ class NeuralBachEngine:
                     bad_voice_indices = [tid for tid, voice in self.token_voices.items() if voice in active_voices]
                     if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
                 
+                # 질질 끄는 음표 방지: 온음표(D4.0) 및 점2분음표(D3.0) 억제, 그리고 직전과 완전히 동일한 노트 반복 시 강력한 페널티
                 if curr_measure < target_measures - 1:
-                    bad_dur_indices = [tid for tid, dur in self.token_durations.items() if abs(dur - 4.0) < 0.001]
+                    bad_dur_indices = [tid for tid, dur in self.token_durations.items() if dur >= 3.0]
                     if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
+                    
+                # Repetition Penalty (연속으로 똑같은 음표/길이를 반복하는 버그 억제)
+                last_few_tokens = current_seq[-10:]
+                for tid in range(logits.shape[-1]):
+                    tok = self.fugue_tokenizer.itos.get(tid, "")
+                    if tok.startswith("[V") and tok in last_few_tokens:
+                        logits[0, -1, tid] -= 5.0  # 강력한 페널티 부여
                     
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
@@ -292,6 +326,10 @@ class NeuralBachEngine:
                     f_idx = self.tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
+                # 1. 2옥타브 범위 이탈 토큰 원천 차단
+                if self.bad_pitch_indices:
+                    logits[0, -1, self.bad_pitch_indices] = -1e9
+                
                 # 유니즌 방지 마스킹
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
@@ -306,11 +344,18 @@ class NeuralBachEngine:
                     if bad_voice_indices:
                         logits[0, -1, bad_voice_indices] = -1e9
                 
-                # 온음표(Whole note, D4.0) 억제 (종지부 제외)
+                # 질질 끄는 음표 방지: 온음표(D4.0) 및 점2분음표(D3.0) 억제
                 if curr_measure < target_measures - 1:
-                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if abs(d - 4.0) < 0.001]
+                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if d >= 3.0]
                     if bad_dur_indices:
                         logits[0, -1, bad_dur_indices] = -1e9
+                        
+                # Repetition Penalty
+                last_few_tokens = current_seq[-10:]
+                for tid in range(logits.shape[-1]):
+                    tok = self.tokenizer.itos.get(tid, "")
+                    if tok.startswith("[V") and tok in last_few_tokens:
+                        logits[0, -1, tid] -= 5.0
                     
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
@@ -378,6 +423,9 @@ class NeuralBachEngine:
                     f_idx = tokenizer.stoi.get("[FINAL]", -1)
                     if f_idx != -1: logits[0, -1, f_idx] += 2.0
                 
+                if self.bad_pitch_indices:
+                    logits[0, -1, self.bad_pitch_indices] = -1e9
+                
                 active_pitches = self._get_active_pitches_at_current_time(current_seq)
                 if active_pitches:
                     bad_indices = [tid for tid, p in self.token_pitches.items() if p in active_pitches]
@@ -389,7 +437,7 @@ class NeuralBachEngine:
                     if bad_voice_indices: logits[0, -1, bad_voice_indices] = -1e9
                 
                 if curr_measure < target_measures - 1:
-                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if abs(d - 4.0) < 0.001]
+                    bad_dur_indices = [tid for tid, d in self.token_durations.items() if d >= 3.0]
                     if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
                 
                 probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
@@ -449,6 +497,17 @@ class NeuralBachEngine:
         if not notes:
             return 0.0
             
+        # 1. 사용자 요구사항 검증: 한 성부 안에 있는 음이 2옥타브(24반음)를 초과하는지 검사
+        voice_pitches = {1: [], 2: [], 3: [], 4: []}
+        for n in notes:
+            voice_pitches[n["voice"]].append(n["pitch"])
+            
+        for v, pitches in voice_pitches.items():
+            if pitches:
+                if max(pitches) - min(pitches) > 24:
+                    # 2옥타브를 벗어나면 무조건 탈락 (점수 0점 반환하여 재작곡 유도)
+                    return 0.0
+                    
         offsets = sorted(list(set(n["offset"] for n in notes)))
         if not offsets:
             return 100.0
