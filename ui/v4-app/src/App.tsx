@@ -9,7 +9,8 @@ import {
   Info,
   Sun,
   Moon,
-  Download
+  Download,
+  TerminalSquare
 } from 'lucide-react';
 import axios from 'axios';
 import * as Tone from 'tone';
@@ -32,6 +33,8 @@ const App: React.FC = () => {
   const [targetMeasures, setTargetMeasures] = useState(8);
   const [creativitySlider, setCreativitySlider] = useState(0.32); // 0 to 1 scale
   const [generatingMode, setGeneratingMode] = useState<'none'|'choral'|'fugue'>('none');
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<Record<number, string[]>>({});
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [midiData, setMidiData] = useState<string | null>(null);
@@ -87,6 +90,7 @@ const App: React.FC = () => {
     }
     
     setGeneratingMode(mode);
+    setDebugLogs({});
     try {
       const actualTemperature = 0.1 + (creativitySlider * 1.4); // Scale 0~1 to 0.1~1.5
       
@@ -149,9 +153,20 @@ const App: React.FC = () => {
                     durationType: n.duration >= 4.0 ? 1 : (n.duration >= 2.0 ? 2 : (n.duration >= 1.0 ? 4 : 8))
                   }));
                   engineRef.current?.setNotes(aiNotes);
+                  if (data.debug) setDebugLogs(data.debug);
                   if (data.type === 'done' && data.midi_base64) {
                     setMidiData(data.midi_base64);
+                    try {
+                      await Tone.start();
+                      const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                      synth.volume.value = -10;
+                      synth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "8n");
+                    } catch (e) {
+                      console.error("Audio play error", e);
+                    }
                   }
+                } else if (data.type === 'debug') {
+                  setDebugLogs(data.debug);
                 } else if (data.type === 'retry') {
                   // Retry animation: Keep only the subject and clear the rest
                   engineRef.current?.setNotes(state.notes.filter(n => n.voice === 1));
@@ -437,9 +452,17 @@ const App: React.FC = () => {
 
           <div className="sidebar-section" style={{ marginTop: 'auto' }}>
             <button 
+              onClick={() => setDebugMode(!debugMode)}
+              className={`nwc-btn ${debugMode ? 'active' : ''}`}
+              style={{ width: '100%', fontSize: '15px', fontWeight: '800', gap: '12px', border: '2px solid var(--border)', padding: '0 20px', justifyContent: 'flex-start', backgroundColor: debugMode ? '#334155' : 'transparent' }}
+            >
+              <TerminalSquare size={20} /> 
+              {debugMode ? 'HIDE DEBUG' : 'SHOW DEBUG'}
+            </button>
+            <button 
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="nwc-btn"
-              style={{ width: '100%', fontSize: '15px', fontWeight: '800', gap: '12px', border: '2px solid var(--border)', padding: '0 20px', justifyContent: 'flex-start' }}
+              style={{ width: '100%', fontSize: '15px', fontWeight: '800', gap: '12px', border: '2px solid var(--border)', marginTop: '12px', padding: '0 20px', justifyContent: 'flex-start' }}
             >
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />} 
               {isDarkMode ? 'LIGHT MODE' : 'DARK MODE'}
@@ -455,8 +478,8 @@ const App: React.FC = () => {
         </aside>
 
         {/* Workspace */}
-        <section className="studio-workspace">
-          <div className="score-container">
+        <section className="studio-workspace" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="score-container" style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             <div className="score-paper">
               <ScoreRenderer 
                 notes={state.notes} 
@@ -471,6 +494,54 @@ const App: React.FC = () => {
               />
             </div>
           </div>
+
+          {/* Debug Console Panel */}
+          {debugMode && (
+            <div className="debug-console-panel" style={{
+              height: '35%',
+              minHeight: '250px',
+              backgroundColor: '#0f172a',
+              borderTop: '2px solid #334155',
+              overflowY: 'auto',
+              padding: '16px',
+              fontFamily: 'Consolas, Monaco, monospace',
+              fontSize: '13px',
+              boxShadow: 'inset 0 4px 6px -1px rgba(0, 0, 0, 0.5)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px', color: '#38bdf8', fontWeight: 'bold', fontSize: '14px' }}>
+                <TerminalSquare size={16} style={{ marginRight: '8px' }}/> 
+                AI Engine Neural Activity Console
+              </div>
+              
+              {Object.keys(debugLogs).length === 0 ? (
+                <div style={{ opacity: 0.5, color: '#94a3b8' }}>&gt; 대기 중... FUGUE 작곡을 시작하면 AI의 실시간 추론(Reasoning) 및 마스킹 로그가 이곳에 표시됩니다.</div>
+              ) : (
+                Object.entries(debugLogs).map(([measure, logs]) => (
+                  <div key={measure} style={{ marginBottom: '20px' }}>
+                    <div style={{ color: '#fbbf24', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '4px', fontWeight: 'bold' }}>
+                      === Measure {measure} ===
+                    </div>
+                    {logs.map((log, idx) => {
+                      const isHighlight = log.includes('마스킹') || log.includes('페널티') || log.includes('강제') || log.includes('생성 호출') || log.includes('정상 종료');
+                      const isToken = log.includes('토큰:');
+                      return (
+                        <div key={idx} style={{ 
+                          padding: '3px 0', 
+                          color: isHighlight ? '#f43f5e' : (isToken ? '#e2e8f0' : '#10b981'),
+                          fontWeight: isHighlight ? 'bold' : 'normal',
+                          paddingLeft: isToken ? '8px' : '0'
+                        }}>
+                          <span style={{ color: '#64748b', marginRight: '12px' }}>[{new Date().toISOString().substring(11, 23)}]</span>
+                          <span style={{ color: isToken ? '#a78bfa' : 'inherit', marginRight: '6px' }}>{isToken ? '→' : '>'}</span>
+                          {log}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {/* Footer inside Workspace */}
           <footer className="studio-footer">

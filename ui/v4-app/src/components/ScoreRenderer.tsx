@@ -90,16 +90,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       
       const maxMeasureIdx = Math.max(maxNoteMeasureIdx, cursorMeasureIdx);
       
-      const dynamicWidth = 100 + 450 + (maxMeasureIdx * 380) + 100; // startX + first measure + rest measures + padding
-
-      const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
-      renderer.resize(dynamicWidth, 600);
-      const context = renderer.getContext();
-      
-      const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
-      context.setFillStyle(themeColor);
-      context.setStrokeStyle(themeColor);
-
       const measures: Record<number, NoteData[]>[] = [];
       
       for (let i = 0; i <= maxMeasureIdx; i++) {
@@ -118,7 +108,6 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
           const durationInThisMeasure = Math.min(remainingDuration, measureEnd - currentOffset);
           
           if (measures[mIdx]) {
-            // Find closest DurationType (1=w, 2=h, 4=q, 8=8, 16=16, 32=32)
             let durType: number = 4;
             const rounded = Math.round(durationInThisMeasure * 1000) / 1000;
             if (rounded >= 4.0) durType = 1;
@@ -141,6 +130,39 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
         }
       });
 
+      const measureWidths: number[] = [];
+      let totalDynamicWidth = 100 + 100; // startX padding + end padding
+
+      measures.forEach((measure, idx) => {
+        let maxNotes = 0;
+        [1, 2, 3, 4].forEach(v => {
+          maxNotes = Math.max(maxNotes, measure[v as 1|2|3|4].length);
+        });
+        const baseWidth = idx === 0 ? 450 : 380;
+        // 16분음표/32분음표 폭주 시 겹침 방지를 위해 노드 개수 기반 동적 길이 할당
+        const requiredWidth = idx === 0 ? Math.max(baseWidth, maxNotes * 40 + 150) : Math.max(baseWidth, maxNotes * 40);
+        measureWidths.push(requiredWidth);
+        totalDynamicWidth += requiredWidth;
+      });
+
+      const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
+      renderer.resize(totalDynamicWidth, 600);
+      const context = renderer.getContext();
+      
+      if (containerRef.current) {
+        containerRef.current.style.width = `${totalDynamicWidth}px`;
+        containerRef.current.style.minWidth = `${totalDynamicWidth}px`;
+        const svg = containerRef.current.querySelector('svg');
+        if (svg) {
+          svg.style.width = `${totalDynamicWidth}px`;
+          svg.style.minWidth = `${totalDynamicWidth}px`;
+        }
+      }
+      
+      const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
+      context.setFillStyle(themeColor);
+      context.setStrokeStyle(themeColor);
+
       let startX = 100;
       const yTreble = 80;
       const yBass = 280;
@@ -149,7 +171,7 @@ export const ScoreRenderer: React.FC<ScoreRendererProps> = ({
       const allRenderedNotes: { note: StaveNote, id: string }[] = [];
 
       measures.forEach((measure, idx) => {
-        const measureWidth = idx === 0 ? 450 : 380;
+        const measureWidth = measureWidths[idx];
         const trebleStave = new Stave(startX, yTreble, measureWidth);
         const bassStave = new Stave(startX, yBass, measureWidth);
 

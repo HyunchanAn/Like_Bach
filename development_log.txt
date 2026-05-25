@@ -577,3 +577,28 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 - Data/Pipeline: music21 코퍼스 기반 바로크 폴리포니 곡(인벤션, WTC) 데이터 수집용 fetch_fugue_data.py 작성 및 데이터 수집. Subject/Answer 휴리스틱 분리용 fugue_parser.py 뼈대 작성. 
 - Backend: api.py에 /api/generate_fugue 엔드포인트 신설 및 GenerationRequestFugue 모델 연동 완료. 기존 모델 가중치(Zero-shot)와의 호환성 유지를 위해 신규 구조 토큰 추가는 Phase 2로 연기.
 - UI/Frontend: App.tsx 내에 기존 CHORAL 생성 버튼과 나란히 FUGUE 버튼을 배치하여, 사용자가 직관적으로 다성부 대위법 생성을 요청할 수 있도록 지원 완료.
+
+### 2026-05-25 (추가 2)
+Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
+
+1. 무한 루프 버그 수정
+- 현상: 백엔드 `neural_engine.py`에서 `[TIME_]` 토큰 생성 시 내부 시계(`current_offset`)가 갱신되지 않아 동일한 시간 토큰이 무한 생성되는 문제 발생.
+- 조치: 토큰 파싱 블록 내에 `current_offset = off`를 추가하여 AI의 시간 진행이 백엔드 내부 로직에 실시간으로 반영되도록 버그 픽스.
+
+2. 오선보(Score) 렌더링 겹침 현상 해결
+- 현상: 40마디에 달하는 푸가 악보가 생성되었음에도 VexFlow SVG 컨테이너 너비가 강제되지 않아 작은 화면에 찌그러지듯 오버랩되어 4마디처럼 보이는 착시 발생.
+- 조치: `ScoreRenderer.tsx` 내 SVG 엘리먼트에 생성된 `totalDynamicWidth` 값을 명시적으로 `style.width`와 `style.minWidth`로 주입하여, 생성된 악보 길이만큼 정상적으로 스크롤되도록 시각적 오류 교정.
+
+3. 디버그 로그 자동 저장 시스템 도입
+- 현상: 사용자 편의성을 위해 디버그 로그를 파일로 저장할 필요성 제기.
+- 조치: `neural_engine.py`의 생성 완료 로직 부분에 파이썬 `datetime`을 활용하여 프로젝트 루트의 `debug_logs/DEBUG-yyyy-mm-dd-hh-mm.txt` 포맷으로 자동 저장되도록 기능 추가.
+
+4. 진정한 4성부 푸가(Fugue) 노출부(Exposition) 구조 복원
+- 현상: 기존 코드가 소프라노(주제)와 알토(응답) 단 2성부만 하드코딩으로 진입시킨 뒤, 곧바로 자유 전개부(`[EPISODE]`)로 넘어가버려 테너와 베이스가 엉뚱한 타이밍에 난입하는 "가짜 푸가(2성 인벤션 수준)" 구조 결함 발견.
+- 조치: 정통 바흐 푸가의 4성부 제시부 문법(Soprano -> Alto -> Tenor -> Bass)을 완벽히 모사하도록 규칙 기반 스케줄링 전면 수정.
+  - V1(소프라노): 0박자 주제 진입
+  - V2(알토): +N박자 5도 하강 응답 진입 (이때 V1은 CS1 대주제 자가 생성)
+  - V3(테너): +2N박자 옥타브 하강 주제 진입 (이때 V1, V2는 CS2, CS1 생성)
+  - V4(베이스): +3N박자 12도 하강 응답 진입 (이때 V1, V2, V3는 CS3, CS2, CS1 생성)
+  위의 정교한 4성부 도입부가 끝난 직후에만 `[EPISODE]` 토큰을 발동시켜 진정한 4성부 푸가가 전개되도록 엔진의 음악적 지능(Musicality) 극대화.
+

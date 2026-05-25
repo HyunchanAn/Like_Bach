@@ -135,7 +135,7 @@ async def stream_fugue_bach(request: GenerationRequestFugue):
             final_notes = engine.generate_fugue(
                 subject_notes=notes_dict,
                 target_measures=target_m,
-                temperature=request.temperature,
+                temperature=max(0.7, request.temperature), # Enforce a minimum temperature of 0.7 for Baroque flow
                 refine_iters=request.refine_iters,
                 stream_queue=stream_q
             )
