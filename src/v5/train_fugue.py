@@ -115,7 +115,7 @@ def train():
         print(f"=== Epoch {epoch} Val Loss: {val_loss/len(val_loader):.4f} ===")
         
         # Save model
-        save_path = f'data/processed/v5/fugue_model_v5.pt'
+        save_path = 'data/processed/v5/fugue_model_v5.pt'
         torch.save(model.state_dict(), save_path)
         print(f"Model saved to {save_path}")
 
