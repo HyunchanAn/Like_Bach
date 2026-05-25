@@ -74,7 +74,7 @@ def train():
     
     print(f"Train chunks: {len(train_dataset)}, Val chunks: {len(val_dataset)}")
     
-    batch_size = 12 # RTX 5080 16GB VRAM, BLOCK_SIZE 4096 requires memory optimization
+    batch_size = 4 # Reduced batch size to prevent CUDA OOM with 4096 BLOCK_SIZE on 16GB VRAM
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
