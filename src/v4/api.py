@@ -39,6 +39,7 @@ def notes_to_midi_base64(notes_list, filename="temp_output.mid"):
 sys.path.append(os.getcwd())
 
 from src.v4.neural_engine import NeuralBachEngine
+from src.v5.neural_engine import HybridFugueEngine
 
 app = FastAPI(title="Like Bach v4.5 API Engine")
 
@@ -53,10 +54,11 @@ app.add_middleware(
 
 # AI 엔진 초기화 (싱글톤 방식)
 engine = None
+fugue_engine_v5 = None
 
 @app.on_event("startup")
 async def startup_event():
-    global engine
+    global engine, fugue_engine_v5
     print("Loading Neural Bach Engine v4.5...")
     try:
         engine = NeuralBachEngine(
@@ -66,6 +68,13 @@ async def startup_event():
         print("Neural Bach Engine loaded successfully.")
     except Exception as e:
         print(f"Error loading AI Engine: {e}")
+        
+    print("Loading V5 Hybrid Fugue Engine...")
+    try:
+        fugue_engine_v5 = HybridFugueEngine()
+        print("V5 Hybrid Fugue Engine loaded successfully.")
+    except Exception as e:
+        print(f"Error loading V5 Fugue Engine: {e}")
 
 class Note(BaseModel):
     pitch: int
@@ -132,7 +141,8 @@ async def stream_fugue_bach(request: GenerationRequestFugue):
         try:
             notes_to_midi_base64(notes_dict, "temp_input.mid")
             
-            final_notes = engine.generate_fugue(
+            target_engine = fugue_engine_v5 if fugue_engine_v5 else engine
+            final_notes = target_engine.generate_fugue(
                 subject_notes=notes_dict,
                 target_measures=target_m,
                 temperature=max(0.7, request.temperature), # Enforce a minimum temperature of 0.7 for Baroque flow

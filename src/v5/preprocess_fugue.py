@@ -210,11 +210,12 @@ class FugueTokenizerV5:
 if __name__ == "__main__":
     os.makedirs('data/processed/v5', exist_ok=True)
     
-    xml_files = glob.glob('data/raw/wtc/*.xml') + glob.glob('data/raw/# Fugue/*.xml')
-    print(f"Found {len(xml_files)} files.")
+    # Include original XMLs and new humdrum-tools KernScores kern format files
+    score_files = glob.glob('data/raw/wtc/*.xml') + glob.glob('data/raw/# Fugue/*.xml') + glob.glob('data/raw/bach-wtc/kern/*f*.krn')
+    print(f"Found {len(score_files)} files.")
     
     all_seqs = []
-    for f in xml_files:
+    for f in score_files:
         print(f"Processing {os.path.basename(f)}...")
         seqs = tokenize_fugue_piece(f)
         all_seqs.extend(seqs)

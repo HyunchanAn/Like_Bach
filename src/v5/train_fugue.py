@@ -1,4 +1,8 @@
 import os
+import sys
+# 루트 디렉터리를 PYTHONPATH에 추가하여 직접 실행 시 에러 방지
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -11,14 +15,30 @@ class FugueDatasetV5(Dataset):
         self.block_size = block_size
         self.data = []
         
+        pad_idx = tokenizer.stoi.get("[PAD]", 0)
+        
         for seq in sequences:
             # Encode tokens to indices
             encoded = tokenizer.encode(seq)
-            # Create sliding windows
-            for i in range(0, len(encoded) - block_size):
-                chunk = encoded[i:i+block_size+1]
-                if len(chunk) == block_size + 1:
-                    self.data.append(chunk)
+            
+            if len(encoded) <= block_size:
+                # Pad short sequences
+                pad_len = block_size + 1 - len(encoded)
+                chunk = encoded + [pad_idx] * pad_len
+                self.data.append(chunk)
+            else:
+                # Create sliding windows with stride to prevent massive duplication
+                stride = block_size // 4
+                for i in range(0, len(encoded) - block_size, stride):
+                    chunk = encoded[i:i+block_size+1]
+                    if len(chunk) == block_size + 1:
+                        self.data.append(chunk)
+                
+                # Ensure the very last chunk is also included
+                if (len(encoded) - block_size) % stride != 0:
+                    chunk = encoded[-block_size-1:]
+                    if len(chunk) == block_size + 1:
+                        self.data.append(chunk)
 
     def __len__(self):
         return len(self.data)
@@ -80,6 +100,15 @@ def train():
     
     # 3. Model
     model = FugueTransformerV5(vocab_size=tokenizer.vocab_size, device=device).to(device)
+    
+    save_path = 'data/processed/v5/fugue_model_v5.pt'
+    if os.path.exists(save_path):
+        print(f"Loading existing model weights from {save_path}...")
+        try:
+            model.load_state_dict(torch.load(save_path, weights_only=True))
+        except Exception as e:
+            print(f"Failed to load weights, starting fresh: {e}")
+            
     optimizer = optim.AdamW(model.parameters(), lr=3e-4)
     
     epochs = 10
@@ -101,6 +130,9 @@ def train():
             if i % 50 == 0:
                 print(f"Epoch {epoch}, Step {i}, Loss: {loss.item():.4f}")
                 
+            if i > 0 and i % 100 == 0:
+                torch.save(model.state_dict(), save_path)
+                
         print(f"=== Epoch {epoch} Average Train Loss: {total_loss/len(train_loader):.4f} ===")
         
         # Validation
@@ -112,7 +144,8 @@ def train():
                 logits, loss = model(x, y)
                 val_loss += loss.item()
         
-        print(f"=== Epoch {epoch} Val Loss: {val_loss/len(val_loader):.4f} ===")
+        avg_val_loss = val_loss / len(val_loader) if len(val_loader) > 0 else 0.0
+        print(f"=== Epoch {epoch} Val Loss: {avg_val_loss:.4f} ===")
         
         # Save model
         save_path = 'data/processed/v5/fugue_model_v5.pt'
