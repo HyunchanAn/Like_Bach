@@ -34,13 +34,13 @@ class HybridFugueEngine:
         for token, tid in self.tokenizer.stoi.items():
             if token.startswith("P"):
                 try: self.token_pitches[tid] = int(token[1:])
-                except: pass
+                except Exception: pass
             elif token.startswith("D"):
                 try: self.token_durations[tid] = float(token[1:])
-                except: pass
+                except Exception: pass
             elif token.startswith("[VOICE_"):
                 try: self.token_voices[tid] = int(token[7])
-                except: pass
+                except Exception: pass
 
     def generate_fugue(self, subject_notes, target_measures=16, temperature=0.55, refine_iters=3, stream_queue=None):
         import random
@@ -127,7 +127,7 @@ class HybridFugueEngine:
                                         token = f"P{p}"
                                         idx_next[0, 0] = self.tokenizer.stoi.get(token, idx_next.item())
                                 last_pitches[v] = p
-                            except: pass
+                            except Exception: pass
                             
                         idx = torch.cat((idx, idx_next), dim=1)
                         current_seq.append(token)
@@ -170,7 +170,7 @@ class HybridFugueEngine:
                                     idx_next[0, 0] = self.tokenizer.stoi.get(token, idx_next.item())
                                     debug_data_cont[str(m)].append(f"[Fail-Safe] 성부 {v} 화음 강제 교정 (도약 차단)")
                             last_pitches[v] = p
-                        except: pass
+                        except Exception: pass
                         
                     idx = torch.cat((idx, idx_next), dim=1)
                     current_seq.append(token)
@@ -215,13 +215,13 @@ class HybridFugueEngine:
                     for v in voice_offsets:
                         if voice_offsets[v] < bar_start:
                             voice_offsets[v] = bar_start
-                except: pass
+                except Exception: pass
             elif t.startswith("[VOICE_"):
                 try: 
                     current_voice = int(t[7:-1])
                     if current_voice not in voice_offsets:
                         voice_offsets[current_voice] = voice_offsets.get(1, 0.0)
-                except: pass
+                except Exception: pass
             elif t == "[REST]":
                 dur = 1.0
                 if i + 1 < len(tokens) and tokens[i+1].startswith("D"):

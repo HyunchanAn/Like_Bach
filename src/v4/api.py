@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -10,9 +11,9 @@ import queue
 import threading
 import json
 import asyncio
-from music21 import stream, note, tempo, meter, key
+from music21 import stream, note, tempo, meter, key, midi
 
-def notes_to_midi_base64(notes_list, filename="temp_output.mid"):
+def notes_to_midi_base64(notes_list):
     s = stream.Score()
     s.insert(0, tempo.MetronomeMark(number=120))
     s.insert(0, meter.TimeSignature('4/4'))
@@ -27,12 +28,20 @@ def notes_to_midi_base64(notes_list, filename="temp_output.mid"):
         m21_note.quarterLength = n['duration']
         parts[n['voice']].insert(n['offset'], m21_note)
         
-    s.write('midi', fp=filename)
     try:
-        with open(filename, 'rb') as f:
-            b64 = base64.b64encode(f.read()).decode('utf-8')
+        # music21 객체를 MidiFile 객체로 변환하여 메모리 버퍼에 기록
+        mf = midi.translate.music21ObjectToMidiFile(s)
+        buf = io.BytesIO()
+        mf.openFileLike(buf)
+        mf.write()
+        
+        # seek(0) 포인터 초기화로 빈 바이트 스트리밍 방지
+        buf.seek(0)
+        
+        b64 = base64.b64encode(buf.read()).decode('utf-8')
         return b64
-    except:
+    except Exception as e:
+        print(f"Error converting notes to MIDI base64: {e}")
         return ""
 
 # Project root 추가
@@ -139,8 +148,6 @@ async def stream_fugue_bach(request: GenerationRequestFugue):
     
     def generate_worker():
         try:
-            notes_to_midi_base64(notes_dict, "temp_input.mid")
-            
             target_engine = fugue_engine_v5 if fugue_engine_v5 else engine
             final_notes = target_engine.generate_fugue(
                 subject_notes=notes_dict,
@@ -150,7 +157,7 @@ async def stream_fugue_bach(request: GenerationRequestFugue):
                 stream_queue=stream_q
             )
             
-            midi_b64 = notes_to_midi_base64(final_notes, "temp_output.mid")
+            midi_b64 = notes_to_midi_base64(final_notes)
             
             stream_q.put({
                 "type": "done",
