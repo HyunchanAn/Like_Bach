@@ -5,7 +5,7 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-from src.v5.models import FugueTransformerV5, BLOCK_SIZE
+from src.v5.models import UnifiedTransformerV5, BLOCK_SIZE
 
 class HybridFugueEngine:
     def __init__(self, model_path='data/processed/v5/fugue_model_v5.pt', tokenizer_path='data/processed/v5/fugue_vocab_v5.pkl'):
@@ -20,7 +20,7 @@ class HybridFugueEngine:
             self.tokenizer.vocab_size = len(self.tokenizer.stoi)
             self.tokenizer.encode = lambda seq: [self.tokenizer.stoi.get(t, self.tokenizer.stoi.get("[UNK]", 0)) for t in seq]
             
-        self.model = FugueTransformerV5(self.tokenizer.vocab_size, device=self.device).to(self.device)
+        self.model = UnifiedTransformerV5(self.tokenizer.vocab_size, device=self.device, is_causal=True).to(self.device)
         
         if os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
@@ -142,6 +142,8 @@ class HybridFugueEngine:
                 
         # 2. Continuation (Let AI generate freely, but ENFORCE scaffolding)
         for m in range(4 * subject_measures + 1, target_measures + 1):
+            if m % 8 == 0:
+                current_seq.append(f"[EPISODE_MODULATION]")
             current_seq.append(f"[BAR_{m}]")
             debug_data_cont = {str(m): [f"=== Measure {m} Generation Start ===", "AI 자유 대위법 전개 중..."]}
             

@@ -10,11 +10,12 @@ N_LAYER = 8
 DROPOUT = 0.1
 
 class Head(nn.Module):
-    def __init__(self, head_size):
+    def __init__(self, head_size, is_causal=True):
         super().__init__()
         self.key = nn.Linear(N_EMBD, head_size, bias=False)
         self.query = nn.Linear(N_EMBD, head_size, bias=False)
         self.value = nn.Linear(N_EMBD, head_size, bias=False)
+        self.is_causal = is_causal
         self.register_buffer('tril', torch.tril(torch.ones(BLOCK_SIZE, BLOCK_SIZE)))
         self.dropout = nn.Dropout(DROPOUT)
 
@@ -23,7 +24,8 @@ class Head(nn.Module):
         k = self.key(x)
         q = self.query(x)
         wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5
-        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        if self.is_causal:
+            wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         wei = F.softmax(wei, dim=-1)
         wei = self.dropout(wei)
         v = self.value(x)
@@ -31,9 +33,9 @@ class Head(nn.Module):
         return out
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, num_heads, head_size):
+    def __init__(self, num_heads, head_size, is_causal=True):
         super().__init__()
-        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.heads = nn.ModuleList([Head(head_size, is_causal=is_causal) for _ in range(num_heads)])
         self.proj = nn.Linear(head_size * num_heads, N_EMBD)
         self.dropout = nn.Dropout(DROPOUT)
 
@@ -56,10 +58,10 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class Block(nn.Module):
-    def __init__(self, n_embd, n_head):
+    def __init__(self, n_embd, n_head, is_causal=True):
         super().__init__()
         head_size = n_embd // n_head
-        self.sa = MultiHeadAttention(n_head, head_size)
+        self.sa = MultiHeadAttention(n_head, head_size, is_causal=is_causal)
         self.ffwd = FeedForward(n_embd)
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
@@ -69,14 +71,15 @@ class Block(nn.Module):
         x = x + self.ffwd(self.ln2(x))
         return x
 
-class FugueTransformerV5(nn.Module):
-    def __init__(self, vocab_size, device="cuda", ignore_index=-1):
+class UnifiedTransformerV5(nn.Module):
+    def __init__(self, vocab_size, device="cuda", ignore_index=-1, is_causal=True):
         super().__init__()
         self.device = device
         self.ignore_index = ignore_index
+        self.is_causal = is_causal
         self.token_embedding_table = nn.Embedding(vocab_size, N_EMBD)
         self.position_embedding_table = nn.Embedding(BLOCK_SIZE, N_EMBD)
-        self.blocks = nn.Sequential(*[Block(N_EMBD, n_head=N_HEAD) for _ in range(N_LAYER)])
+        self.blocks = nn.Sequential(*[Block(N_EMBD, n_head=N_HEAD, is_causal=is_causal) for _ in range(N_LAYER)])
         self.ln_f = nn.LayerNorm(N_EMBD)
         self.lm_head = nn.Linear(N_EMBD, vocab_size)
 

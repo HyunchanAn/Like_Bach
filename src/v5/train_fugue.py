@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
-from src.v5.models import FugueTransformerV5, BLOCK_SIZE
+from src.v5.models import UnifiedTransformerV5, BLOCK_SIZE
 import torch.optim as optim
 
 class FugueDatasetV5(Dataset):
@@ -99,7 +99,7 @@ def train():
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     # 3. Model
-    model = FugueTransformerV5(vocab_size=tokenizer.vocab_size, device=device).to(device)
+    model = UnifiedTransformerV5(vocab_size=tokenizer.vocab_size, device=device, is_causal=True).to(device)
     
     save_path = 'data/processed/v5/fugue_model_v5.pt'
     if os.path.exists(save_path):
