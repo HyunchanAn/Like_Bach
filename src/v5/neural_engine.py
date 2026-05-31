@@ -25,7 +25,7 @@ class HybridFugueEngine:
         if os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
             self.model.eval()
-            print(f">>> V5 Hybrid Fugue Engine loaded successfully.")
+            print(">>> V5 Hybrid Fugue Engine loaded successfully.")
             
         # Cache token mappings for fast NumPy validation
         self.token_pitches = {}
@@ -143,7 +143,7 @@ class HybridFugueEngine:
         # 2. Continuation (Let AI generate freely, but ENFORCE scaffolding)
         for m in range(4 * subject_measures + 1, target_measures + 1):
             if m % 8 == 0:
-                current_seq.append(f"[EPISODE_MODULATION]")
+                current_seq.append("[EPISODE_MODULATION]")
             current_seq.append(f"[BAR_{m}]")
             debug_data_cont = {str(m): [f"=== Measure {m} Generation Start ===", "AI 자유 대위법 전개 중..."]}
             
@@ -188,7 +188,8 @@ class HybridFugueEngine:
                 
         # Write the final debug document to disk
         try:
-            import os, datetime
+            import os
+            import datetime
             os.makedirs("debug_logs", exist_ok=True)
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
             with open(f"debug_logs/DEBUG-V5-{timestamp}.txt", "w", encoding="utf-8") as f:

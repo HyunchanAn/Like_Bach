@@ -1,4 +1,4 @@
-### 2026-04-12
+﻿### 2026-04-12
 프로젝트 명칭: Bach-Style Polyphony Generative Engine (BPGE)
 초기 기획 및 파이프라인 구축 시작
 
@@ -28,14 +28,14 @@
 - UI 개편 (VexFlow)을 통해 브라우저에서 직접 악보 생성 지원
 
 ### Phase 4: 실시간 스트리밍(SSE) 및 렌더링 버그 픽스 (2026-05-24)
-- **실시간 스트리밍 (SSE) 파이프라인 구축**:
+- 실시간 스트리밍 (SSE) 파이프라인 구축:
   - `api.py`에 비동기 큐(Queue)와 쓰레딩을 활용한 `/api/stream_fugue` 엔드포인트 신설.
   - `App.tsx`에서 Fetch API와 `ReadableStream`을 사용하여 백엔드에서 생성되는 토큰(음표)을 청크 단위로 수신.
   - 브라우저 로딩 대기 화면을 없애고, 실시간으로 빈 오선지 위에 음표가 타다닥 렌더링되는 시각적 효과 구현. 화성 평가 실패 시 악보를 리셋하고 다시 그리는(Rollback) 효과 추가.
-- **Fugue Tie (묶음줄) 버그 픽스**:
+- Fugue Tie (묶음줄) 버그 픽스:
   - VexFlow 렌더러와 MIDI 파일에서 마디(Barline)를 넘어가는 긴 음표가 하나로 묶이는 현상(Tie) 제거.
   - `_parse_tokens_to_notes` 내부에서 마디를 초과하는 음표를 여러 개의 작은 음표로 강제 분리(Split)하여 각 마디마다 독립적으로 타건되도록 수정.
-- **음역대 시각적 최적화**:
+- 음역대 시각적 최적화:
   - 사용자 피드백을 반영하여 Tenor 및 Bass 성부의 절대 음역 상한선을 낮춤 (덧줄이 과도하게 위로 솟구치는 시각적 부담 방지).브라우저 기반 인터페이스 구축 예정.
 - 사용자가 오선보를 클릭하여 음높이와 길이를 실시간으로 입력하고 바흐 엔진의 응답을 시각적으로 확인 가능.
 
@@ -317,39 +317,39 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 ## User Review Required
 
 > [!WARNING]
-> **데이터 전처리(Labeling) 난이도**
+> 데이터 전처리(Labeling) 난이도
 > 푸가의 경우 "어디서부터 어디까지가 Subject이고 Answer인지" 모델에게 알려주려면 구조 토큰(`[SUBJECT]`, `[ANSWER]` 등)이 필요합니다. 이를 자동화하기 위해 `music21`을 사용하여 첫 번째 성부의 진입을 `[SUBJECT]`, 두 번째 성부의 진입(보통 5도 이조)을 `[ANSWER]`로 자동 태깅하는 휴리스틱 파이프라인을 구축하려고 합니다. 데이터 전처리에 다소 시간이 소요될 수 있는데 진행해도 괜찮을까요?
 
 > [!IMPORTANT]
-> **모델 컨텍스트 길이 (Sequence Length)**
+> 모델 컨텍스트 길이 (Sequence Length)
 > 푸가는 코랄보다 훨씬 깁니다. 기존 모델의 `BLOCK_SIZE = 1024`로는 푸가 한 곡을 온전히 담기 부족할 수 있습니다. `BLOCK_SIZE`를 4096 이상으로 늘리거나, RoPE(Rotary Position Embedding)와 같은 상대적 위치 인코딩을 도입하는 아키텍처 확장이 필요합니다.
 
 ## Proposed Plan
 
 ### 1. Data Pipeline (데이터 가공 및 구조 토큰화)
-- **대상 파일 및 데이터소스 (Data Sources)**: 
+- 대상 파일 및 데이터소스 (Data Sources): 
   - `E:\Github\Like_Bach\data\raw\# Fugue` 내의 데이터들을 기본으로 활용합니다. (WTC, Art of Fugue 등)
-  - **데이터 부족(Sparsity) 해결 전략**: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
-    1. **Data Augmentation**: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
-    2. **Dataset Expansion**: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
-    3. **대규모 오픈 데이터셋(Open Datasets) 결합**: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 **MAESTRO Dataset**(Google Magenta), **GiantMIDI-Piano**, 그리고 **Lakh MIDI Dataset** 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
-  - 추가 메타데이터는 **KernScores 데이터베이스(Humdrum 포맷, `.krn`)** 와 **music21 내장 Bach Corpus**를 적극 활용합니다.
-- **파서(Parser) 로직 구현**:
+  - 데이터 부족(Sparsity) 해결 전략: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
+    1. Data Augmentation: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
+    2. Dataset Expansion: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
+    3. 대규모 오픈 데이터셋(Open Datasets) 결합: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 MAESTRO Dataset(Google Magenta), GiantMIDI-Piano, 그리고 Lakh MIDI Dataset 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
+  - 추가 메타데이터는 KernScores 데이터베이스(Humdrum 포맷, `.krn`) 와 music21 내장 Bach Corpus를 적극 활용합니다.
+- 파서(Parser) 로직 구현:
   - `music21`로 곡을 불러와 각 성부별 진입(Entry) 시점을 분석합니다.
   - 최초 진입 성부의 멜로디 라인을 추출하여 `[SUBJECT]` 토큰으로 감쌉니다.
   - 다음 성부가 진입할 때 `[ANSWER]`(Real/Tonal 구분) 토큰으로 감싸고, 첫 성부의 라인은 `[COUNTERSUBJECT]`로 태깅합니다.
   - 모든 성부가 한 번씩 등장한 이후의 전개부는 `[EPISODE]`, 마지막 페달 포인트나 밀집 묘출은 `[STRETTO]`/`[CADENCE]`로 분류합니다.
-- **토큰 포맷 설계**: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
+- 토큰 포맷 설계: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
 
 ### 2. Model Architecture (모델 구조 변경)
-- **컨텍스트 확장**: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
-- **디코딩(Inference) 단계의 하이브리드 제어**:
+- 컨텍스트 확장: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
+- 디코딩(Inference) 단계의 하이브리드 제어:
   - 푸가의 대위법(Parallel 5ths, Octaves 금지 등)을 모델이 완전히 Zero-shot으로 완벽히 지키기는 어렵습니다.
-  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 **결함 없는 생성 루프**를 설계합니다.
+  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 결함 없는 생성 루프를 설계합니다.
 
 ### 3. Training Strategy (학습 전략)
-- **Pre-training**: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
-- **Fine-tuning**: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
+- Pre-training: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
+- Fine-tuning: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
 
 ## Verification Plan
 
@@ -512,39 +512,39 @@ Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동 (Harvest Phase)
 ## User Review Required
 
 > [!WARNING]
-> **데이터 전처리(Labeling) 난이도**
+> 데이터 전처리(Labeling) 난이도
 > 푸가의 경우 "어디서부터 어디까지가 Subject이고 Answer인지" 모델에게 알려주려면 구조 토큰(`[SUBJECT]`, `[ANSWER]` 등)이 필요합니다. 이를 자동화하기 위해 `music21`을 사용하여 첫 번째 성부의 진입을 `[SUBJECT]`, 두 번째 성부의 진입(보통 5도 이조)을 `[ANSWER]`로 자동 태깅하는 휴리스틱 파이프라인을 구축하려고 합니다. 데이터 전처리에 다소 시간이 소요될 수 있는데 진행해도 괜찮을까요?
 
 > [!IMPORTANT]
-> **모델 컨텍스트 길이 (Sequence Length)**
+> 모델 컨텍스트 길이 (Sequence Length)
 > 푸가는 코랄보다 훨씬 깁니다. 기존 모델의 `BLOCK_SIZE = 1024`로는 푸가 한 곡을 온전히 담기 부족할 수 있습니다. `BLOCK_SIZE`를 4096 이상으로 늘리거나, RoPE(Rotary Position Embedding)와 같은 상대적 위치 인코딩을 도입하는 아키텍처 확장이 필요합니다.
 
 ## Proposed Plan
 
 ### 1. Data Pipeline (데이터 가공 및 구조 토큰화)
-- **대상 파일 및 데이터소스 (Data Sources)**: 
+- 대상 파일 및 데이터소스 (Data Sources): 
   - `E:\Github\Like_Bach\data\raw\# Fugue` 내의 데이터들을 기본으로 활용합니다. (WTC, Art of Fugue 등)
-  - **데이터 부족(Sparsity) 해결 전략**: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
-    1. **Data Augmentation**: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
-    2. **Dataset Expansion**: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
-    3. **대규모 오픈 데이터셋(Open Datasets) 결합**: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 **MAESTRO Dataset**(Google Magenta), **GiantMIDI-Piano**, 그리고 **Lakh MIDI Dataset** 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
-  - 추가 메타데이터는 **KernScores 데이터베이스(Humdrum 포맷, `.krn`)** 와 **music21 내장 Bach Corpus**를 적극 활용합니다.
-- **파서(Parser) 로직 구현**:
+  - 데이터 부족(Sparsity) 해결 전략: 순수 바흐 푸가만으로는 트랜스포머 학습에 데이터가 턱없이 부족합니다(약 100여 곡). 이를 해결하기 위해 다음과 같은 기법을 적용합니다.
+    1. Data Augmentation: 모든 곡을 12키(Key)로 이조(Transposition)하여 데이터양을 12배로 뻥튀기합니다.
+    2. Dataset Expansion: 바흐의 인벤션, 심포니아, 오르간 푸가뿐만 아니라 헨델, 북스테후데 등 바로크 대위법 악보를 활용합니다.
+    3. 대규모 오픈 데이터셋(Open Datasets) 결합: 모델의 기초적인 다성음악(Polyphony) 이해도를 높이기 위해, 대규모 심볼릭 음악 오픈 데이터셋인 MAESTRO Dataset(Google Magenta), GiantMIDI-Piano, 그리고 Lakh MIDI Dataset 내의 클래식/바로크 서브셋을 Pre-training 단계에 적극 포함시켜 모델의 음악적 기초 체력을 극대화합니다.
+  - 추가 메타데이터는 KernScores 데이터베이스(Humdrum 포맷, `.krn`) 와 music21 내장 Bach Corpus를 적극 활용합니다.
+- 파서(Parser) 로직 구현:
   - `music21`로 곡을 불러와 각 성부별 진입(Entry) 시점을 분석합니다.
   - 최초 진입 성부의 멜로디 라인을 추출하여 `[SUBJECT]` 토큰으로 감쌉니다.
   - 다음 성부가 진입할 때 `[ANSWER]`(Real/Tonal 구분) 토큰으로 감싸고, 첫 성부의 라인은 `[COUNTERSUBJECT]`로 태깅합니다.
   - 모든 성부가 한 번씩 등장한 이후의 전개부는 `[EPISODE]`, 마지막 페달 포인트나 밀집 묘출은 `[STRETTO]`/`[CADENCE]`로 분류합니다.
-- **토큰 포맷 설계**: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
+- 토큰 포맷 설계: 기존 `[TIME_]` 기반의 절대 마디 단위보다는 성부 간 독립성을 강조하는 이벤트 기반(`[WAIT_BEAT]`, `[VOICE_N]`) 형태가 푸가에 더 적합할 수 있습니다.
 
 ### 2. Model Architecture (모델 구조 변경)
-- **컨텍스트 확장**: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
-- **디코딩(Inference) 단계의 하이브리드 제어**:
+- 컨텍스트 확장: 기존 `BachTransformer`의 `BLOCK_SIZE`를 대폭 늘리거나, 메모리 효율을 위해 Flash Attention을 도입합니다.
+- 디코딩(Inference) 단계의 하이브리드 제어:
   - 푸가의 대위법(Parallel 5ths, Octaves 금지 등)을 모델이 완전히 Zero-shot으로 완벽히 지키기는 어렵습니다.
-  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 **결함 없는 생성 루프**를 설계합니다.
+  - 추론 시 생성된 멜로디를 `music21` 룰 체커(Rule Checker)로 실시간 검증하고, 금지된 규칙이 감지되면 해당 마디를 다시 샘플링(Re-sampling)하는 결함 없는 생성 루프를 설계합니다.
 
 ### 3. Training Strategy (학습 전략)
-- **Pre-training**: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
-- **Fine-tuning**: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
+- Pre-training: 먼저 Bach의 일반적인 대위법(인벤션, 심포니아 등)으로 기초 대위법을 훈련합니다.
+- Fine-tuning: 구조 토큰이 엄격하게 태깅된 WTC 및 Art of Fugue 데이터로 구조적 작곡 능력(Exposition -> Episode -> Final)을 집중 훈련시킵니다.
 
 ## Verification Plan
 
@@ -605,12 +605,12 @@ Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
 
 
 ## 2026-05-25: Phase 4 Hybrid Inference & Verification Module (Plan)
-- ����: ��׶��忡�� ���� ���� V5 �Ʒ�(25M Params, 4096 Context, 10 Epochs, batch_size=1)�� �Ϸ�� �� ���� ������ Phase 4 ���� ��ȹ�Դϴ�.
-- �ֿ� ���� ��ǥ:
-  1. NumPy ��� �淮 ȭ�� ���� ��� (_evaluate_harmony): music21�� ������ �����ϰ�, �ټ�/������ ���길���� ���� 5��/8���� �����մϴ�.
-  2. ���� ����(Attack State) ���͸�: ������(Pedal Point)�̳� �����(Suspension)�� �����Ǵ� ���� �ٸ� ���ΰ� ������ �� �̸� �������� �������� �ʵ���, ��ǥ�� ���� �����Ǵ� ������ Interval ��ȭ�� �����մϴ�.
-  3. ���ú�(Exposition) �������� ����: V1�� ����(Subject) ���� �� V2�� ����(Answer)�� 5�� �������� �����ϴ� ������ ���̺긮�� ����(Teacher Forcing)���� ��ū�� ���� �����Ͽ� ������ ������ 100% �����մϴ�.
-  4. Fail-safe ����: Ư�� ���𿡼� ���� ����ؼ� ����ȭ���̳� ���� ������ �߻����� ��õ�(Retry)�� 3ȸ�� �ʰ��� ���, 3��/6�� ��ȭ������ ���� ��ȯ�Ͽ� ���� ������ �����ϰ� ���� ������������ �������� Ȯ���մϴ�.
+- 설명: 백그라운드에서 진행 중인 V5 훈련(25M Params, 4096 Context, 10 Epochs, batch_size=1)이 완료된 후 내일 착수할 Phase 4 구현 계획입니다.
+- 주요 구현 목표:
+  1. NumPy 기반 경량 화성 검증 모듈 (_evaluate_harmony): music21의 병목을 제거하고, 텐서/넘파이 연산만으로 병행 5도/8도를 적발합니다.
+  2. 발음 시점(Attack State) 필터링: 지속음(Pedal Point)이나 계류음(Suspension)이 유지되는 동안 다른 성부가 움직일 때 이를 병행으로 오진하지 않도록, 음표가 새로 발음되는 시점의 Interval 변화만 추적합니다.
+  3. 제시부(Exposition) 결정론적 교정: V1의 주제(Subject) 등장 후 V2의 답주(Answer)가 5도 간격으로 진입하는 구간은 하이브리드 로직(Teacher Forcing)으로 토큰을 강제 주입하여 엄격한 형식을 100% 보장합니다.
+  4. Fail-safe 로직: 특정 마디에서 모델이 계속해서 불협화음이나 병행 오류를 발생시켜 재시도(Retry)가 3회를 초과할 경우, 3도/6도 협화음으로 강제 변환하여 무한 루프를 방지하고 생성 파이프라인의 안정성을 확보합니다.
 
 
 ## 2026-05-26 11:37: Phase 4 V5 Hybrid Engine 디버깅 및 버그 리포트
@@ -630,29 +630,44 @@ Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
 - 추가 이슈: 도약 차단 조치 이후에도 화성적이지 않은 수평 진행(Non-harmonic horizontal progression)이 다수 발견됨. 추후 파인튜닝 시 학습 데이터의 질적 개선 및 대위법 규칙 강제 엔진 개선 필요.
 
 
-## 2026-05-28: Like Bach v5.0 - ���̺긮�� ���� ����ȭ �� �����̷� ��Ģ ���� ����
-- ��ũ I/O ����ȭ:
-  - ���� ��ũ�� temp_input.mid, temp_output.mid�� �Ź� ���� �д� �������� io.BytesIO�� ���� �޸� ���� �̵� ������ ���� ��ȯ ������� ����.
-  - seek(0)�� ����� ������ �ʱ�ȭ ó���� ���������ν� ���ڵ� ���� �� ��Ʈ���� ���� ����.
-- ��Ƽ�ھ� ����ȭ:
-  - preprocess_fugue.py�� ProcessPoolExecutor�� �����Ͽ� AMD 9900X CPU�� 24������ ���� ó���� �����ϵ��� ��ó�� ������ ����. ��ó�� ó�� �ð��� ȹ�������� ������.
-- �ϵ���� ���� ����:
-  - HybridFugueEngine ���� �� torch.compile(mode="reduce-overhead")�� Ȱ��ȭ�ϰ�, ���������� PYTORCH_CUDA_ALLOC_CONF�� �����Ͽ� VRAM ĳ�� ����ȭ �� ������ ����.
-  - �߷� ��ƾ ���� �� torch.cuda.empty_cache()�� �ֱ������� ����.
-- Tonal Answer �� ���� ���� ����ȭ:
-  - ������ ����� �պκ�(�ռ� 30% ���� �� ���� 3-4�� ��ǥ) �� �������� �������� ���� �ƶ��� �м��Ͽ� Tonal Answer�� ���� ������ ���������ν� ���� �ְ� ����.
-  - ������ ���� ������ �����ϰ� ���� Offset ���Ŀ� ���� First, Second, Third, Fourth Entry ������ ��������� Tonic-Dominant-Tonic-Dominant ������ �����ϵ��� ����.
-  - ���κ� Tessitura Center�� �����ϰ� ��Ÿ�긦 �������� �����ϴ� ���� ���� �˰����� �߰�.
-- LogitsProcessor ���� ����:
-  - ��Ÿ�� �ϰ����� ��ġ�� ��ó�� ���� ������ ����ϰ�, ��ū ���� ������ �۵��ϴ� Logits ����ŷ ���͸�(filter_logits)���� ���� �Ͽ�ȭ.
-  - ������ ��Ż �� 1��Ÿ�� �ʰ� ���� ��ġ ����.
-  - ����� ���� Safe-select ������ �����Ͽ� ��� ��ū�� ����ŷ�� ��� ���� ��ġ ����� ��ȭ�� �Ǵ� REST ��ū�� ���� �����ϴ� ���� ó�� ����.
+## 2026-05-28: Like Bach v5.0 - 하이브리드 엔진 최적화 및 음악이론 규칙 전면 개편
+- 디스크 I/O 최적화:
+  - 기존 디스크의 temp_input.mid, temp_output.mid를 매번 쓰고 읽는 구조에서 io.BytesIO를 통한 메모리 상의 미디 데이터 직접 변환 방식으로 개편.
+  - seek(0)을 사용해 포인터 초기화 처리를 명시함으로써 인코딩 누수 및 스트리밍 유실 방지.
+- 멀티코어 병렬화:
+  - preprocess_fugue.py에 ProcessPoolExecutor를 도입하여 AMD 9900X CPU의 24스레드 병렬 처리가 가능하도록 전처리 루프를 개편. 전처리 처리 시간이 획기적으로 개선됨.
+- 하드웨어 가속 적용:
+  - HybridFugueEngine 부팅 시 torch.compile(mode="reduce-overhead")을 활성화하고, 전역적으로 PYTORCH_CUDA_ALLOC_CONF를 설정하여 VRAM 캐시 단편화 및 누수를 억제.
+  - 추론 루틴 종료 시 torch.cuda.empty_cache()를 주기적으로 실행.
+- Tonal Answer 및 성부 매핑 구조화:
+  - 주제의 상대적 앞부분(앞선 30% 영역 및 최초 3-4개 음표) 내 으뜸음과 딸림음의 도약 맥락을 분석하여 Tonal Answer의 적용 영역을 제한함으로써 선율 왜곡 예방.
+  - 고정된 성부 매핑을 제거하고 진입 Offset 정렬에 따라 First, Second, Third, Fourth Entry 순으로 상대적으로 Tonic-Dominant-Tonic-Dominant 조성을 배정하도록 구현.
+  - 성부별 Tessitura Center에 근접하게 옥타브를 동적으로 보정하는 음역 보정 알고리즘 추가.
+- LogitsProcessor 단일 제어:
+  - 런타임 일관성을 해치는 후처리 교정 로직을 폐기하고, 토큰 생성 시점에 작동하는 Logits 마스킹 필터링(filter_logits)으로 시점 일원화.
+  - 음역대 이탈 및 1옥타브 초과 도약 피치 차단.
+  - 데드락 방지 Safe-select 로직을 구현하여 모든 토큰이 마스킹될 경우 직전 피치 기반의 협화음 또는 REST 토큰을 강제 구원하는 안전 처리 적용.
 
 
-## 2026-05-28: Like Bach v5.0-Pro ���� �̽� ���� �� ȯ�� �м� (�߰�)
-- ���� 5�� ���� �̽��� �ű� ����(v5-Pro 113M)�� ����� ���� �м�:
-  - �̽� 1, 2, 5, 6, 7���� ���� 25M Causal LM ���� �� Global Offset ���͸��� ������ ������������ ��Ű��ó�� �Ѱ迡�� �Ļ��� ������ �Ը�.
-  - v5-Pro�� ž��� RoPE(��� ��ġ) �� ���� �Ӻ���(Pitch Class, Octave, Voice ID ���� �ռ�)�� ���� ȭ�� ������ ���� �н��� ������ �����ν� �̵� �̽��� �ٺ������� �ؼ��� ����.
-- PyTorch CUDA ���뼺 ���� �ذ�:
-  - ���̽� 3.14 �۷ι� ���� ȯ�濡�� ���� PyTorch�� CPU ���� ����(+cpu)�� ž��Ǿ� �Ʒ� ���μ��� �⵿ �� CPU�� RAM�� �����ϵǰ� GPU(RTX 5080)�� ���� ���¿� ������ ���� �ĺ�.
-  - CPU �Ʒ� ���μ��� ���� ���� ��, CUDA 12.6 ����� ������ GPU ���� ���� ����(pip install torch --index-url https://download.pytorch.org/whl/cu126 --force-reinstall)�� ��� ��ü ž�� ��.
+## 2026-05-28: Like Bach v5.0-Pro 오픈 이슈 연동 및 환경 분석 (추가)
+- 남은 5개 오픈 이슈와 신규 엔진(v5-Pro 113M)의 기술적 연동 분석:
+  - 이슈 1, 2, 5, 6, 7번은 기존 25M Causal LM 구조 및 Global Offset 인터리빙 데이터 파이프라인의 아키텍처적 한계에서 파생된 것으로 규명.
+  - v5-Pro에 탑재된 RoPE(상대 위치) 및 복합 임베딩(Pitch Class, Octave, Voice ID 개별 합성)이 모델의 화성 인지적 공간 학습을 가능케 함으로써 이들 이슈를 근본적으로 해소할 예정.
+- PyTorch CUDA 가용성 문제 해결:
+  - 파이썬 3.14 글로벌 개발 환경에서 공식 PyTorch가 CPU 전용 빌드(+cpu)로 탑재되어 훈련 프로세스 기동 시 CPU와 RAM만 과부하되고 GPU(RTX 5080)가 유휴 상태에 빠지는 현상 식별.
+  - CPU 훈련 프로세스 강제 종료 후, CUDA 12.6 기반의 고성능 GPU 연산 가속 빌드(pip install torch --index-url https://download.pytorch.org/whl/cu126 --force-reinstall)를 긴급 교체 탑재 중.
+
+
+
+## 2026-06-01: 백엔드 오류 해결, V5 113M Pro 모델 아키텍처 복구 및 구동 검증
+- test_inference.py 수집 오류 해결:
+  - models.py에 정의되지 않은 FugueTransformerV5 클래스 참조를 UnifiedTransformerV5로 교체하여 pytest 수집 시 발생하는 ImportError 제거.
+- models.py 아키텍처 불일치 오류 해결 및 113M Pro 스펙 복구:
+  - data/processed/v5/fugue_model_v5.pt 체크포인트 로드 시 발생하는 shape mismatch 오류를 해결하기 위해 UnifiedTransformerV5 구조를 역분석하여 전면 재설계.
+  - Rotary Position Embedding(RoPE) 모듈(RotaryEmbedding) 및 4개 입력 속성(token, pitch_class, octave, voice) 임베딩을 sum하여 병합하는 다중 임베딩 인풋 레이어 구현.
+  - 체크포인트에 tril 버퍼 키가 저장되어 있지 않아 발생하는 Missing key(s) 에러를 방지하기 위해 Head 클래스 내부의 tril 버퍼를 persistent=False로 등록 변경.
+  - 임베딩 차원을 768, 블록 레이어 수를 16, 헤드 수를 12로 변경하여 113M Pro 사양으로 models.py 완전 복구.
+- 백엔드 코드 정적 분석 및 유닛 테스트 검증:
+  - ruff check 시 검출된 f-string 미사용 구문 및 다중 모듈 import 라인을 정리하여 All checks passed 달성.
+  - pytest를 실행하여 3개 단위 테스트 케이스의 100% 통과 확인.
+  - FastAPI 서버(api.py)를 구동하여 startup_event 과정에서 V5 Hybrid Fugue Engine이 예외 없이 완전히 로딩되고 Uvicorn 서빙 준비가 완료됨을 실시간으로 확인 및 검증 완료.

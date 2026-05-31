@@ -3,7 +3,7 @@ import sys
 import pickle
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import torch
-from src.v5.models import FugueTransformerV5, BLOCK_SIZE
+from src.v5.models import UnifiedTransformerV5, BLOCK_SIZE
 
 class FugueEngineV5:
     def __init__(self, model_path, vocab_path):
@@ -18,7 +18,7 @@ class FugueEngineV5:
             self.vocab_size = len(self.stoi)
             
         # Load model
-        self.model = FugueTransformerV5(vocab_size=self.vocab_size, device=self.device).to(self.device)
+        self.model = UnifiedTransformerV5(vocab_size=self.vocab_size, device=self.device).to(self.device)
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
         print("Model loaded successfully.")
