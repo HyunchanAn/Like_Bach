@@ -356,6 +356,16 @@ class HybridFugueEngine:
         except Exception as e:
             print("Failed to save debug document:", e)
             
+        # 추론 연산 종료 후 VRAM 캐시 비우기 (메모리 단편화 및 누수 억제)
+        try:
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+            
         return self._parse_v5_tokens(current_seq)
 
     def _parse_v5_tokens(self, tokens):

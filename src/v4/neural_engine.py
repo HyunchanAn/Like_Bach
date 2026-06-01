@@ -520,15 +520,6 @@ class NeuralBachEngine:
                     break
         except: pass
 
-        # 누락 성부 강제 할당 (Collision 방지 및 유니즌 방지)
-        for v in required_voices:
-            if v not in found_voices:
-                active_pitches = self._get_active_pitches_at_current_time(current_seq)
-                candidate_pitch = base_pitch - (12 if v != "[V1]" else 0)
-                while candidate_pitch in active_pitches:
-                    candidate_pitch -= 12
-                current_seq.append(f"{v} P{candidate_pitch} D0.5")
-
     def _fill_voices(self, current_seq, target_measures, curr_measure, temperature, required_voices, base_pitch, use_fugue_model=False):
         found_voices = []
         model = self.fugue_model if use_fugue_model else self.model
