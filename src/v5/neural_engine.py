@@ -42,6 +42,103 @@ class HybridFugueEngine:
                 try: self.token_voices[tid] = int(token[7])
                 except Exception: pass
 
+    def _filter_logits(self, logits, voice, last_pitch, already_generated_notes, current_offset, current_seq):
+        # 1. 복제본 생성
+        masked_logits = logits.clone()
+        
+        # 성부별 정석 음역대 정의
+        VOICE_RANGES = {
+            1: (60, 81), # Soprano: C4 ~ A5
+            2: (55, 76), # Alto: G3 ~ E5
+            3: (48, 69), # Tenor: C3 ~ A4
+            4: (40, 64)  # Bass: E2 ~ E4
+        }
+        
+        # 2. 현재 성부의 음역대 가져오기
+        v_min, v_max = VOICE_RANGES.get(voice, (40, 81))
+        
+        # 3. 현재 오프셋에 울리고 있는 다른 성부들의 피치(active_pitches) 파악
+        active_pitches = []
+        for note in already_generated_notes:
+            if note['voice'] != voice:
+                # 쉼표가 아닌 실음이 울리고 있는 구간 확인
+                if note['offset'] <= current_offset < note['offset'] + note['duration']:
+                    active_pitches.append(note['pitch'])
+                    
+        # 4. 각 토큰에 대해 검사
+        for tid, p in self.token_pitches.items():
+            # 4-1. 음역대 이탈 검사
+            if p < v_min or p > v_max:
+                masked_logits[0, tid] = -1e9
+                continue
+                
+            # 4-2. 수평적 도약 제한
+            # 1옥타브(12반음) 초과 도약 금지
+            # 또한 감5도(6반음), 단7도(10반음), 장7도(11반음) 등의 불협화음 도약 방지
+            if last_pitch is not None:
+                interval = abs(p - last_pitch)
+                if interval > 12: # 1옥타브 초과 도약 차단
+                    masked_logits[0, tid] = -1e9
+                    continue
+                if interval in [6, 10, 11]: # 트라이톤, 단7도, 장7도 도약 제한
+                    masked_logits[0, tid] = -1e9
+                    continue
+            
+            # 4-3. 수직적 화성 협화 유도 (현재 오프셋에 다른 성부가 울리고 있을 때)
+            for ap in active_pitches:
+                harm_interval = abs(p - ap)
+                # 단2도(1), 장7도(11) 같은 거친 불협화음 원천 배제
+                if harm_interval in [1, 11]:
+                    masked_logits[0, tid] = -1e9
+                    break
+                # 증4도/감5도(트라이톤=6) 배제
+                if harm_interval == 6:
+                    masked_logits[0, tid] = -1e9
+                    break
+                # 성부 간 유니즌(음 겹침) 배제 (단, 옥타브는 허용하되 같은 피치 0은 차단)
+                if harm_interval == 0:
+                    masked_logits[0, tid] = -1e9
+                    break
+                    
+                # Voice Crossing 방지: 성부 간의 수직적 순서 보장 (Soprano > Alto > Tenor > Bass)
+                for note in already_generated_notes:
+                    if note['voice'] != voice and note['offset'] <= current_offset < note['offset'] + note['duration']:
+                        other_v = note['voice']
+                        other_p = note['pitch']
+                        if other_v < voice: # other_v가 더 높은 성부 (예: 1 < 2)
+                            if p >= other_p: # 내가 더 높은 성부의 피치보다 같거나 높게 불면 Voice Crossing
+                                masked_logits[0, tid] = -1e9
+                                break
+                        elif other_v > voice: # other_v가 더 낮은 성부 (예: 4 > 3)
+                            if p <= other_p: # 내가 더 낮은 성부의 피치보다 같거나 낮게 불면 Voice Crossing
+                                masked_logits[0, tid] = -1e9
+                                break
+                                
+        # 5. 과도한 쉼표 제약
+        rest_tid = self.tokenizer.stoi.get("[REST]", None)
+        if rest_tid is not None:
+            # 5-1. 직전 토큰이 [REST]였다면 연속 쉼표 차단
+            if len(current_seq) > 0 and current_seq[-1] == "[REST]":
+                masked_logits[0, rest_tid] = -1e9
+            
+            # 5-2. 다른 성부들이 이 오프셋에서 모두 쉬고 있다면, 이 성부는 쉴 수 없음 (침묵 구간 방지)
+            active_voices_count = 0
+            for note in already_generated_notes:
+                if note['offset'] <= current_offset < note['offset'] + note['duration']:
+                    active_voices_count += 1
+            if active_voices_count == 0 and len(already_generated_notes) > 0:
+                masked_logits[0, rest_tid] = -1e9
+
+        # 6. 세이프가드 (데드락 방지): 모든 토큰이 마스킹되어 버린 경우
+        # 만약 유효한 피치 후보나 쉼표가 하나도 안 남았다면, 원래 logits로 복구하여 최소한 작동은 하도록 함
+        if (masked_logits[0] <= -1e8).all():
+            masked_logits = logits.clone()
+            for tid, p in self.token_pitches.items():
+                if p < v_min or p > v_max:
+                    masked_logits[0, tid] = -1e9
+                    
+        return masked_logits
+
     def generate_fugue(self, subject_notes, target_measures=16, temperature=0.55, refine_iters=3, stream_queue=None):
         import random
         if not subject_notes:
@@ -111,7 +208,20 @@ class HybridFugueEngine:
                     idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
                     for _ in range(60):
                         logits, _ = self.model(idx[:, -BLOCK_SIZE:])
-                        probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
+                        
+                        current_notes = self._parse_v5_tokens(current_seq)
+                        current_offset = voice_offsets[v]
+                        
+                        filtered_logits = self._filter_logits(
+                            logits=logits[:, -1, :],
+                            voice=v,
+                            last_pitch=last_pitches[v],
+                            already_generated_notes=current_notes,
+                            current_offset=current_offset,
+                            current_seq=current_seq
+                        )
+                        
+                        probs = F.softmax(filtered_logits / temperature, dim=-1)
                         idx_next = torch.multinomial(probs, num_samples=1)
                         token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
                         
@@ -121,11 +231,6 @@ class HybridFugueEngine:
                         if token.startswith("P"):
                             try:
                                 p = int(token[1:])
-                                if last_pitches[v] is not None:
-                                    if abs(p - last_pitches[v]) > 15:
-                                        p = last_pitches[v] + random.choice([3, 4, -3, -4])
-                                        token = f"P{p}"
-                                        idx_next[0, 0] = self.tokenizer.stoi.get(token, idx_next.item())
                                 last_pitches[v] = p
                             except Exception: pass
                             
@@ -154,7 +259,20 @@ class HybridFugueEngine:
                 # Generate notes for this voice until it tries to start a new voice or bar
                 for _ in range(60): # Max 60 tokens per voice per measure
                     logits, _ = self.model(idx[:, -BLOCK_SIZE:])
-                    probs = F.softmax(logits[:, -1, :] / temperature, dim=-1)
+                    
+                    current_notes = self._parse_v5_tokens(current_seq)
+                    current_offset = voice_offsets[v]
+                    
+                    filtered_logits = self._filter_logits(
+                        logits=logits[:, -1, :],
+                        voice=v,
+                        last_pitch=last_pitches[v],
+                        already_generated_notes=current_notes,
+                        current_offset=current_offset,
+                        current_seq=current_seq
+                    )
+                    
+                    probs = F.softmax(filtered_logits / temperature, dim=-1)
                     idx_next = torch.multinomial(probs, num_samples=1)
                     token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
                     
@@ -164,13 +282,6 @@ class HybridFugueEngine:
                     if token.startswith("P"):
                         try:
                             p = int(token[1:])
-                            if last_pitches[v] is not None:
-                                prev_p = last_pitches[v]
-                                if abs(p - prev_p) > 15:
-                                    p = prev_p + random.choice([3, 4, -3, -4])
-                                    token = f"P{p}"
-                                    idx_next[0, 0] = self.tokenizer.stoi.get(token, idx_next.item())
-                                    debug_data_cont[str(m)].append(f"[Fail-Safe] 성부 {v} 화음 강제 교정 (도약 차단)")
                             last_pitches[v] = p
                         except Exception: pass
                         

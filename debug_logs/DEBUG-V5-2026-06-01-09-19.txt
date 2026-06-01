@@ -1,0 +1,147 @@
+=== V5 Hybrid Fugue Engine Neural Activity Console ===
+=== Measure 1 ===
+=== Measure 1 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 2 ===
+=== Measure 2 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 3 ===
+=== Measure 3 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 4 ===
+=== Measure 4 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 5 ===
+=== Measure 5 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 6 ===
+=== Measure 6 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 7 ===
+=== Measure 7 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 8 ===
+=== Measure 8 Exposition ===
+4성부 강제 스케줄링 진행 중
+=== Measure 9 ===
+=== Measure 9 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 10 ===
+=== Measure 10 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 11 ===
+=== Measure 11 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 1 화음 강제 교정 (도약 차단)
+=== Measure 12 ===
+=== Measure 12 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 4 화음 강제 교정 (도약 차단)
+=== Measure 13 ===
+=== Measure 13 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 14 ===
+=== Measure 14 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 15 ===
+=== Measure 15 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 16 ===
+=== Measure 16 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 17 ===
+=== Measure 17 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 18 ===
+=== Measure 18 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+=== Measure 19 ===
+=== Measure 19 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 4 화음 강제 교정 (도약 차단)
+=== Measure 20 ===
+=== Measure 20 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 21 ===
+=== Measure 21 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 22 ===
+=== Measure 22 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 23 ===
+=== Measure 23 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)
+=== Measure 24 ===
+=== Measure 24 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 25 ===
+=== Measure 25 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 26 ===
+=== Measure 26 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 4 화음 강제 교정 (도약 차단)
+=== Measure 27 ===
+=== Measure 27 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+=== Measure 28 ===
+=== Measure 28 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 29 ===
+=== Measure 29 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+=== Measure 30 ===
+=== Measure 30 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 1 화음 강제 교정 (도약 차단)
+=== Measure 31 ===
+=== Measure 31 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+=== Measure 32 ===
+=== Measure 32 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 33 ===
+=== Measure 33 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 1 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 2 화음 강제 교정 (도약 차단)
+=== Measure 34 ===
+=== Measure 34 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 1 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 4 화음 강제 교정 (도약 차단)
+=== Measure 35 ===
+=== Measure 35 Generation Start ===
+AI 자유 대위법 전개 중...
+=== Measure 36 ===
+=== Measure 36 Generation Start ===
+AI 자유 대위법 전개 중...
+[Fail-Safe] 성부 1 화음 강제 교정 (도약 차단)
+[Fail-Safe] 성부 3 화음 강제 교정 (도약 차단)

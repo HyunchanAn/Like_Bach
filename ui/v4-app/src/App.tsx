@@ -41,6 +41,15 @@ const App: React.FC = () => {
   
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const engineRef = useRef<NWCKeyboardEngine | null>(null);
+  const originalSubjectRef = useRef<NoteData[] | null>(null);
+
+  // 사용자가 수동으로 악보를 편집하여 하성 3성부가 사라지면 최초 테마 보존 상태 리셋
+  useEffect(() => {
+    const hasAIGenerated = state.notes.some(n => n.voice > 1);
+    if (!hasAIGenerated) {
+      originalSubjectRef.current = null;
+    }
+  }, [state.notes]);
 
   // 오디오 엔진 초기화
   useEffect(() => {
@@ -126,9 +135,19 @@ const App: React.FC = () => {
     try {
       const actualTemperature = 0.1 + (creativitySlider * 1.4); // Scale 0~1 to 0.1~1.5
       
+      const hasAIGenerated = state.notes.some(n => n.voice > 1);
+      let subjectNotesToSend: NoteData[] = [];
+      
+      if (!hasAIGenerated) {
+        subjectNotesToSend = state.notes.filter(n => n.voice === 1);
+        originalSubjectRef.current = subjectNotesToSend;
+      } else {
+        subjectNotesToSend = originalSubjectRef.current || state.notes.filter(n => n.voice === 1);
+      }
+      
       if (mode === 'choral') {
         const response = await axios.post(`${API_BASE_URL}/api/generate`, {
-          subject_notes: state.notes.filter(n => n.voice === 1),
+          subject_notes: subjectNotesToSend,
           target_measures: targetMeasures,
           temperature: actualTemperature,
           refine_iters: 3
@@ -151,7 +170,7 @@ const App: React.FC = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            subject_notes: state.notes.filter(n => n.voice === 1),
+            subject_notes: subjectNotesToSend,
             target_measures: targetMeasures,
             temperature: actualTemperature,
             refine_iters: 3
