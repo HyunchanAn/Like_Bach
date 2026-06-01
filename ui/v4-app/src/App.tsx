@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [midiData, setMidiData] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const engineRef = useRef<NWCKeyboardEngine | null>(null);
@@ -50,6 +51,58 @@ const App: React.FC = () => {
       originalSubjectRef.current = null;
     }
   }, [state.notes]);
+
+  // 백엔드 상태 검사 함수
+  const checkBackendHealth = async (): Promise<boolean> => {
+    try {
+      const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 1000 });
+      if (healthRes.data && healthRes.data.status === "ok") {
+        setBackendStatus('online');
+        return true;
+      }
+    } catch (e) {
+      setBackendStatus('offline');
+    }
+    return false;
+  };
+
+  // 백엔드 자동 기동 및 체크
+  const checkOrStartBackend = async () => {
+    if (generatingMode !== 'none') return;
+    setBackendStatus('checking');
+    const isReady = await checkBackendHealth();
+    if (isReady) return;
+
+    try {
+      await axios.get(`/api-start-backend`);
+      let started = false;
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 500 });
+          if (healthRes.data && healthRes.data.status === "ok") {
+            setBackendStatus('online');
+            started = true;
+            break;
+          }
+        } catch (err) {}
+      }
+      if (!started) {
+        setBackendStatus('offline');
+        alert("백엔드 서버 기동에 실패했습니다. 수동으로 initial.bat를 실행해 주세요.");
+      }
+    } catch (startErr) {
+      console.error("Failed to start backend:", startErr);
+      setBackendStatus('offline');
+    }
+  };
+
+  // 마운트 시 최초 검사 및 주기적 폴링 설정
+  useEffect(() => {
+    checkBackendHealth();
+    const interval = setInterval(checkBackendHealth, 6000);
+    return () => clearInterval(interval);
+  }, []);
 
   // 오디오 엔진 초기화
   useEffect(() => {
@@ -135,10 +188,12 @@ const App: React.FC = () => {
 
     // 1. 백엔드 상태 검사 및 자동 기동
     let isBackendReady = false;
+    setBackendStatus('checking');
     try {
       const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 1000 });
       if (healthRes.data && healthRes.data.status === "ok") {
         isBackendReady = true;
+        setBackendStatus('online');
       }
     } catch (e) {
       isBackendReady = false;
@@ -157,6 +212,7 @@ const App: React.FC = () => {
             const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 500 });
             if (healthRes.data && healthRes.data.status === "ok") {
               isBackendReady = true;
+              setBackendStatus('online');
               break;
             }
           } catch (err) {}
@@ -167,6 +223,7 @@ const App: React.FC = () => {
     }
 
     if (!isBackendReady) {
+      setBackendStatus('offline');
       alert("백엔드 서버 기동에 실패했습니다. 수동으로 initial.bat를 실행해 주세요.");
       setGeneratingMode('none');
       return;
@@ -413,6 +470,18 @@ const App: React.FC = () => {
     setMidiData(null);
   };
 
+  // 입력된 소프라노(주제)의 마디 수 계산
+  const getSubjectMeasures = (): number => {
+    const v1Notes = state.notes.filter(n => n.voice === 1);
+    if (v1Notes.length === 0) return 0;
+    const maxEndBeat = v1Notes.reduce((max, n) => Math.max(max, n.offset + n.duration), 0);
+    return Math.ceil(maxEndBeat / 4.0);
+  };
+
+  const subjectMeasures = getSubjectMeasures();
+  const minFugueMeasures = subjectMeasures * 4;
+  const isFugueDisabled = minFugueMeasures > 0 && targetMeasures < minFugueMeasures;
+
   return (
     <div className={`studio-root ${!isDarkMode ? 'light-theme' : ''}`}>
       {/* Header & Toolbar */}
@@ -439,14 +508,14 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <div className="slider-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 600 }}>Measures</label>
             <input 
               type="range" min="4" max="64" step="4" 
               value={targetMeasures} 
               onChange={(e) => setTargetMeasures(parseInt(e.target.value))}
-              style={{ width: '120px' }}
+              style={{ width: '100px' }}
             />
             <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--accent)', minWidth: '30px', textAlign: 'center' }}>{targetMeasures}</span>
           </div>
@@ -469,12 +538,35 @@ const App: React.FC = () => {
               type="range" min="0" max="1" step="0.01" 
               value={creativitySlider} 
               onChange={(e) => setCreativitySlider(parseFloat(e.target.value))}
-              style={{ width: '120px' }}
+              style={{ width: '100px' }}
             />
             <span style={{ fontSize: '18px', fontWeight: '900', color: '#ec4899', minWidth: '40px', textAlign: 'center' }}>{creativitySlider.toFixed(2)}</span>
           </div>
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              onClick={checkOrStartBackend}
+              className={`nwc-btn`}
+              title="Click to check or start Backend"
+              disabled={generatingMode !== 'none' || backendStatus === 'checking'}
+              style={{ 
+                borderRadius: '16px', 
+                background: 'var(--bg-main)', 
+                color: backendStatus === 'online' ? '#22c55e' : (backendStatus === 'offline' ? '#ef4444' : '#eab308'), 
+                border: '2px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '0 16px',
+                opacity: generatingMode !== 'none' ? 0.6 : 1,
+                cursor: generatingMode !== 'none' ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <Cpu size={18} className={backendStatus === 'checking' ? 'animate-spin' : ''} />
+              <span style={{ fontSize: '13px', fontWeight: 'bold' }}>
+                {backendStatus === 'online' ? 'BACKEND: ON' : (backendStatus === 'offline' ? 'BACKEND: OFF' : 'CHECKING...')}
+              </span>
+            </button>
             <button 
               onClick={() => {
                 if (midiData) {
@@ -498,22 +590,51 @@ const App: React.FC = () => {
             >
               <CircleDot size={28} />
             </button>
-            <button 
-              onClick={() => handleGenerate('choral')}
-              disabled={generatingMode !== 'none'}
-              className="compose-btn"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)', transition: 'transform 0.2s, box-shadow 0.2s' }}
-            >
-              {generatingMode === 'choral' ? 'PROCESSING...' : 'CHORAL'}
-            </button>
-            <button 
-              onClick={() => handleGenerate('fugue')}
-              disabled={generatingMode !== 'none'}
-              className="compose-btn"
-              style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', boxShadow: '0 4px 15px rgba(236, 72, 153, 0.4)', transition: 'transform 0.2s, box-shadow 0.2s' }}
-            >
-              {generatingMode === 'fugue' ? 'PROCESSING...' : 'FUGUE'}
-            </button>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', position: 'relative' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  onClick={() => handleGenerate('choral')}
+                  disabled={generatingMode !== 'none'}
+                  className="compose-btn"
+                  style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                >
+                  {generatingMode === 'choral' ? 'PROCESSING...' : 'CHORAL'}
+                </button>
+                <button 
+                  onClick={() => handleGenerate('fugue')}
+                  disabled={generatingMode !== 'none' || isFugueDisabled}
+                  className="compose-btn"
+                  style={{ 
+                    background: isFugueDisabled 
+                      ? '#475569' 
+                      : 'linear-gradient(135deg, #ec4899, #f43f5e)', 
+                    boxShadow: isFugueDisabled 
+                      ? 'none' 
+                      : '0 4px 15px rgba(236, 72, 153, 0.4)', 
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    cursor: isFugueDisabled ? 'not-allowed' : 'pointer',
+                    opacity: isFugueDisabled ? 0.6 : 1
+                  }}
+                >
+                  {generatingMode === 'fugue' ? 'PROCESSING...' : 'FUGUE'}
+                </button>
+              </div>
+              
+              {isFugueDisabled && (
+                <div style={{ 
+                  fontSize: '11px', 
+                  color: '#ef4444', 
+                  fontWeight: 'bold', 
+                  textAlign: 'right', 
+                  whiteSpace: 'nowrap',
+                  marginTop: '2px',
+                  lineHeight: '1.2'
+                }}>
+                  FUGUE 작곡은 테마({subjectMeasures}마디)의 4배인 최소 {minFugueMeasures}마디 이상 필요합니다
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
