@@ -165,13 +165,21 @@ class HybridFugueEngine:
             if active_voices_count == 0 and len(already_generated_notes) > 0:
                 masked_logits[0, rest_tid] = -1e9
 
-        # 6. 세이프가드 (데드락 방지): 모든 토큰이 마스킹되어 버린 경우
-        # 만약 유효한 피치 후보나 쉼표가 하나도 안 남았다면, 원래 logits로 복구하여 최소한 작동은 하도록 함
-        if (masked_logits[0] <= -1e8).all():
+        # 5-3. 쉼표 자체에 대한 페널티 부여 (쉼표가 과도하게 자주 선택되는 현상 방지)
+        if rest_tid is not None and masked_logits[0, rest_tid] > -1e8:
+            masked_logits[0, rest_tid] -= 3.5
+
+        # 6. 세이프가드 (데드락 방지): 화성 규칙 등으로 인해 유효한 피치 후보가 극단적으로 적을 때, 쉼표가 강제되는 버그 방지
+        num_active_pitches = sum([1 for tid in self.token_pitches if masked_logits[0, tid] > -1e8])
+        if num_active_pitches < 3:
+            # 쉼표를 제외한 피치 후보군이 고갈되면, 원래 logits로 복원하되 정석 음역대 이탈만 필터링
             masked_logits = logits.clone()
             for tid, p in self.token_pitches.items():
                 if p < v_min or p > v_max:
                     masked_logits[0, tid] = -1e9
+            # 복원 후에도 쉼표 페널티는 유지
+            if rest_tid is not None and masked_logits[0, rest_tid] > -1e8:
+                masked_logits[0, rest_tid] -= 3.5
                     
         return masked_logits
 
