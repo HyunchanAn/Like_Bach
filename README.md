@@ -1,5 +1,6 @@
 # Like Bach: Harmonic Generative Engine v4.6
 
+![Status](https://img.shields.io/badge/Status-v4.6-brightgreen) ![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![Backend](https://img.shields.io/badge/Backend-FastAPI%20%7C%20PyTorch-red) ![UI](https://img.shields.io/badge/UI-React%20%7C%20Vite-orange) ![CI/CD Pipeline](https://img.shields.io/badge/CI%2FCD%20Pipeline-passing-brightgreen?logo=github)
 바흐의 4성부 화성 체계를 완벽히 학습하고, DeepBach 및 BachBot의 선진 알고리즘을 이식하여 음악적 논리성과 구조적 완결성을 극대화한 통합 작곡 엔진입니다. 이번 v4.6 업데이트를 통해 데이터 전처리 파이프라인의 오프셋 추출 로직을 전면 수정하였으며, 프론트엔드의 렌더링 및 재생 동기화 기능이 대폭 향상되었습니다.
 
 ## Key Features (v4.6 Update)
@@ -12,6 +13,15 @@
 - Accurate Stem Rendering: 4성부의 기둥 방향(소프라노/테너 위, 알토/베이스 아래)을 완벽하게 분리 렌더링하여 악보 가독성을 극대화했습니다.
 
 ## Technical Architecture
+
+```mermaid
+graph TD
+    Raw[Raw MIDI Data] --> Pre[Data Engineering<br/>music21 / Roman Analysis / Global Offset]
+    Pre --> Model[Dual Neural Engine<br/>Chorale Engine / Fugue Engine]
+    Model --> API[Backend API<br/>FastAPI Async Server]
+    API --> UI[Frontend Studio<br/>React / VexFlow / Tone.js]
+    UI --> Out[Interactive Sheet Music & Audio Synthesis]
+```
 
 ### Dual-Engine Architecture (Chorale vs Fugue)
 v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이를 완벽히 구현하기 위해 독립적인 듀얼 엔진 구조(Phase 2)를 채택했습니다.
@@ -63,7 +73,7 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
 
 상세한 기술 개발 과정 및 최적화 이력은 development_log.txt에서 확인할 수 있습니다. 오염된 이전 버전의 모델과 실패 기록은 legacy/v4.5-bugged 브랜치에 안전하게 격리 보관되어 있습니다.
 
-## 🔮 Future Work (앞으로 해야 할 일)
+## Future Work (앞으로 해야 할 일)
 
 - **1. Fugue Composer 엔진 완전 통합 (Phase 2)**
   - 현재 기획 및 작성 중인 `fugue_model.pt` 학습 파이프라인(`train_fugue.py`, `preprocess_fugue.py`)을 완성하고, 듀얼 엔진 구조를 백엔드에 완벽히 통합하여 대위법 기반 생성 기능을 출시해야 합니다.
