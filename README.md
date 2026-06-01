@@ -16,11 +16,11 @@
 
 ```mermaid
 graph TD
-    Raw[Raw MIDI Data] --> Pre[Data Engineering<br/>music21 / Roman Analysis / Global Offset]
-    Pre --> Model[Dual Neural Engine<br/>Chorale Engine / Fugue Engine]
-    Model --> API[Backend API<br/>FastAPI Async Server]
-    API --> UI[Frontend Studio<br/>React / VexFlow / Tone.js]
-    UI --> Out[Interactive Sheet Music & Audio Synthesis]
+    Raw["Raw MIDI Data"] --> Pre["Data Engineering<br/>music21 / Roman Analysis / Global Offset"]
+    Pre --> Model["Dual Neural Engine<br/>Chorale Engine / Fugue Engine"]
+    Model --> API["Backend API<br/>FastAPI Async Server"]
+    API --> UI["Frontend Studio<br/>React / VexFlow / Tone.js"]
+    UI --> Out["Interactive Sheet Music & Audio Synthesis"]
 ```
 
 ### Dual-Engine Architecture (Chorale vs Fugue)
