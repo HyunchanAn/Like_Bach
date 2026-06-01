@@ -558,6 +558,9 @@ const App: React.FC = () => {
                 alignItems: 'center',
                 gap: '8px',
                 padding: '0 16px',
+                width: 'auto',
+                minWidth: '160px',
+                whiteSpace: 'nowrap',
                 opacity: generatingMode !== 'none' ? 0.6 : 1,
                 cursor: generatingMode !== 'none' ? 'not-allowed' : 'pointer'
               }}
