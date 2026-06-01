@@ -132,6 +132,46 @@ const App: React.FC = () => {
     
     setGeneratingMode(mode);
     setDebugLogs({});
+
+    // 1. 백엔드 상태 검사 및 자동 기동
+    let isBackendReady = false;
+    try {
+      const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 1000 });
+      if (healthRes.data && healthRes.data.status === "ok") {
+        isBackendReady = true;
+      }
+    } catch (e) {
+      isBackendReady = false;
+    }
+
+    if (!isBackendReady) {
+      console.log("Backend not responding. Attempting to start backend server...");
+      try {
+        // Vite dev server의 start-backend 미들웨어 호출
+        await axios.get(`/api-start-backend`);
+        
+        // 최대 10회 (5초간) 헬스체크 폴링 진행
+        for (let i = 0; i < 10; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            const healthRes = await axios.get(`${API_BASE_URL}/api/health`, { timeout: 500 });
+            if (healthRes.data && healthRes.data.status === "ok") {
+              isBackendReady = true;
+              break;
+            }
+          } catch (err) {}
+        }
+      } catch (startErr) {
+        console.error("Failed to trigger start backend middleware:", startErr);
+      }
+    }
+
+    if (!isBackendReady) {
+      alert("백엔드 서버 기동에 실패했습니다. 수동으로 initial.bat를 실행해 주세요.");
+      setGeneratingMode('none');
+      return;
+    }
+
     try {
       const actualTemperature = 0.1 + (creativitySlider * 1.4); // Scale 0~1 to 0.1~1.5
       
@@ -161,7 +201,10 @@ const App: React.FC = () => {
             voice: n.voice as 1|2|3|4,
             durationType: n.duration >= 4.0 ? 1 : (n.duration >= 2.0 ? 2 : (n.duration >= 1.0 ? 4 : 8))
           }));
-          engineRef.current?.setNotes(aiNotes);
+          const engineRefInstance = engineRef.current;
+          if (engineRefInstance) {
+            engineRefInstance.setNotes(aiNotes);
+          }
           if (response.data.midi_base64) setMidiData(response.data.midi_base64);
         }
       } else {
@@ -203,7 +246,10 @@ const App: React.FC = () => {
                     voice: n.voice as 1|2|3|4,
                     durationType: n.duration >= 4.0 ? 1 : (n.duration >= 2.0 ? 2 : (n.duration >= 1.0 ? 4 : 8))
                   }));
-                  engineRef.current?.setNotes(aiNotes);
+                  const engineRefInstance = engineRef.current;
+                  if (engineRefInstance) {
+                    engineRefInstance.setNotes(aiNotes);
+                  }
                   if (data.debug) setDebugLogs(data.debug);
                   if (data.type === 'done' && data.midi_base64) {
                     setMidiData(data.midi_base64);
@@ -220,7 +266,10 @@ const App: React.FC = () => {
                   setDebugLogs(data.debug);
                 } else if (data.type === 'retry') {
                   // Retry animation: Keep only the subject and clear the rest
-                  engineRef.current?.setNotes(state.notes.filter(n => n.voice === 1));
+                  const engineRefInstance = engineRef.current;
+                  if (engineRefInstance) {
+                    engineRefInstance.setNotes(state.notes.filter(n => n.voice === 1));
+                  }
                 } else if (data.type === 'error') {
                   console.error("Stream Error:", data.message);
                 }

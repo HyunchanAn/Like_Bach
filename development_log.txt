@@ -503,3 +503,11 @@ Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
   - generate_fugue 메서드 완료 시점에 gc.collect()와 torch.cuda.empty_cache()를 명시적으로 실행하여, 연산이 끝나는 즉시 GPU VRAM 점유율을 800MB 수준의 최적 상태로 강제 복구하도록 보완.
   - CHORAL 생성(/api/generate) 시, src/v4/neural_engine.py 내 _inject_roman_token 함수 맨 끝에 정의되지 않은 변수(required_voices 등)를 스캔하려다 NameError(500 서버 에러)가 발생하여 고전 코랄 구동이 정지되어 있던 심각한 런타임 오류 발견.
   - V4 _fill_voices 내에 이미 정상 작동 중이던 동일 누락 성부 강제 할당 기능과 중복 덧붙여진 레거시였음을 확인하고, _inject_roman_token 내의 에러 블록을 완전히 소거하여 코랄 생성 파이프라인 역시 완벽 복구 완료.
+
+[2026-06-01 19:05] 백엔드 자동 기동 오류 수정 및 spawn 기반 비동기 기동 최적화
+- 현상: 백엔드 미동작 상태에서 작곡 버튼 클릭 시, 프론트엔드가 백엔드를 실행하는 API(/api-start-backend)가 무한 펜딩에 빠지며 타임아웃되는 현상 확인.
+- 원인: child_process.exec 호출이 기동된 FastAPI 프로세스의 완전 종료를 대기하도록 동작하여 Vite 서버의 HTTP 응답이 차단됨.
+- 수정 사항:
+  1) 기존 exec 방식을 child_process.spawn 기반으로 개편. detached: true, stdio: 'ignore', subprocess.unref() 설정을 적용하여 백엔드 기동 명령만 보낸 뒤 즉시 프론트엔드에 성공 응답을 반환하도록 개선.
+  2) 프로젝트 루트에 가상환경(.venv)이 존재할 경우 가상환경 내 activate.bat를 경유하여 파이썬 프로세스를 기동하도록 유연성 확보.
+- 검증 결과: 호출 시 즉각 성공 응답이 반환되고, 백엔드가 백그라운드에 구동된 후 2~3초 내에 /api/health 통신이 성공하여 작곡 요청이 원활하게 연계됨을 최종 확인.
