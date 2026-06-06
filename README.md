@@ -24,16 +24,21 @@ graph TD
     UI --> Out["Interactive Sheet Music & Audio Synthesis"]
 ```
 
-### Dual-Engine Architecture (Chorale vs Fugue)
-v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이를 완벽히 구현하기 위해 독립적인 듀얼 엔진 구조(Phase 2)를 채택했습니다.
-- Chorale Engine (bach_model.pt): 화성의 수직적 결합(Homophony)과 코드 진행(Roman Numeral) 학습에 특화된 모델입니다. 4성부가 동일한 박자 구조 안에서 규칙적으로 움직이는 찬송가풍 음악 생성에 적합합니다.
-- Fugue Engine (fugue_model.pt): 성부의 수평적 독립성(Polyphony)과 모방 대위법 학습에 특화된 전용 모델입니다. [SUBJECT], [ANSWER], [EPISODE]와 같은 거시적 구조 토큰을 학습하여, 각 성부가 서로 다른 리듬으로 교차하며 기승전결을 전개합니다.
+### 1. Data Engineering & Interleaving Pipeline
+- **Global Offset Alignment:** 성부 간의 수직적 화성 관계와 수평적 대위적 흐름을 보존하기 위해, 전통적인 순차적 나열 방식을 배제하고 절대 시간(Global Offset) 기반의 인터리빙(Interleaving) 토큰 파이프라인을 적용했습니다. 이를 통해 성부 교차 및 휴지기(Rest) 상황에서도 데이터 오염 없이 학습이 가능합니다.
+- **Automated Harmonic Analysis:** `music21` 라이브러리를 활용하여 원본 MIDI 데이터로부터 Key 중심의 전조(Modulation) 분석 및 로마자 화성 기호([ROMAN_I], [ROMAN_V7] 등)를 자동으로 추출하여 컨텍스트 토큰으로 주입합니다.
 
-### 시스템 구성 요소
-- Neural Engine: Transformer-based Generative Models (25M Parameters per engine)
-- Data Engineering: music21 기반의 고도화된 로마자 화성 분석, 전조 분석 및 절대 시간(Global Offset) 인터리빙 토큰 파이프라인
-- Frontend Studio: React, Vite, VexFlow(악보 렌더링), Tone.js(오디오 신디사이저) 기반의 통합 UI 스튜디오
-- Backend API: FastAPI 기반의 비동기 추론 서버
+### 2. Dual Neural Engine Inference (Phase 2)
+- **Chorale Engine (25M):** 수직적 홈포니(Homophony)에 최적화되어 있으며, 화성적 개연성과 코드 전개(Roman Numeral Context)를 기반으로 4성부를 유기적으로 동시 생성합니다.
+- **Fugue Engine (25M~340M Scalable):** 수평적 폴리포니(Polyphony)에 특화된 모델로, 거시 구조 토큰(`[SUBJECT]`, `[ANSWER]`, `[EPISODE]`)을 해석하여 모방 대위법을 구사합니다. 입력된 주제에 대해 내장 성부가 정확히 5도 이조(Transposition)된 답창을 모방하도록 유도합니다.
+
+### 3. Real-time Constraint Control via Logits Warping
+- **In-flight Harmonic Filtering:** 생성 완료 후 사후적으로 오류를 수정하는 In-painting 방식의 Latency 저하 문제를 해결하기 위해, 추론(Inference) 단계의 `_filter_logits` 엔진 내에 **Logits Warping** 메커니즘을 내장했습니다.
+- **Anti-Parallelism Masking:** 모델이 다음 토큰을 샘플링하기 직전, 대위법적 금기 사항(병행 5도, 병행 8도 등)을 유발할 수 있는 음정 토큰의 확률(Logits)을 마스킹하여, 실시간 추론 속도를 보존하면서도 엄격한 화성학 규칙을 강제합니다.
+
+### 4. Interactive Studio Sync
+- **FastAPI Async Broker:** 백엔드 API는 비동기 스트리밍 인터페이스를 제공하여 대용량 컨텍스트 추론 중에도 프론트엔드와의 연결 리소스를 최적화합니다.
+- **Dynamic Render & Playback:** 프론트엔드 스튜디오(React)는 `VexFlow`와 `Tone.js`를 동기화 마이크로태스크 큐로 제어합니다. 재생 헤드의 이동에 맞춰 악보의 4성부 스템(Stem) 기둥 방향을 분리 렌더링함과 동시에 실시간 횡스크롤 하이라이팅을 수행합니다.
 
 ## 설치 및 실행 가이드
 
