@@ -17,11 +17,45 @@
 
 ```mermaid
 graph TD
-    Raw["Raw MIDI Data"] --> Pre["Data Engineering<br/>music21 / Roman Analysis / Global Offset"]
-    Pre --> Model["Dual Neural Engine<br/>Chorale Engine / Fugue Engine"]
-    Model --> API["Backend API<br/>FastAPI Async Server"]
-    API --> UI["Frontend Studio<br/>React / VexFlow / Tone.js"]
-    UI --> Out["Interactive Sheet Music & Audio Synthesis"]
+    %% 스타일 정의
+    classDef data fill:#2b2b2b,stroke:#4f4f4f,stroke-width:2px;
+    classDef engine fill:#1a365d,stroke:#2b6cb0,stroke-width:2px,color:#fff;
+    classDef control fill:#744210,stroke:#d69e2e,stroke-width:2px,color:#fff;
+    classDef ui fill:#234e52,stroke:#319795,stroke-width:2px,color:#fff;
+
+    %% 1. 데이터 엔지니어링 파트
+    A[Raw MIDI Data] --> B(music21 Parser)
+    B --> C[Global Offset Interleaved Tokens]
+    B --> D[Automated Roman Numeral Context]
+
+    %% 2. 추론 및 실시간 제어 파트 (Dual Engine & Logits Warping)
+    C & D --> E{Dual Neural Engine Selection}
+    
+    subgraph Inference_Loop [Inference Runtime]
+        E -->|Homophony| F[Chorale Engine 25M]
+        E -->|Polyphony| G[Fugue Engine 25M~340M]
+        
+        F & G --> H[Next Token Logits]
+        H --> I[Logits Warping Engine _filter_logits]
+        I -->|Anti-Parallelism Masking| J[Strict Harmonic Constraint Evaluation]
+        J -->|Feedback & Token Sampling| H
+    end
+
+    %% 3. 비동기 브로커 및 프론트엔드 동기화
+    J -->|Sampled Stream| K[FastAPI Async Broker]
+    
+    subgraph Frontend_Studio [React Interactive Studio]
+        K -->|Async Streaming| L[State Manager]
+        L -->|Microtask Queue Sync| M[VexFlow Score Renderer]
+        L -->|Microtask Queue Sync| N[Tone.js Audio Synthesizer]
+        M & N --> O[Dynamic Stem Rendering & Real-time H-Scroll Highlighting]
+    end
+
+    %% 클래스 지정
+    class A,C,D,H data;
+    class F,G engine;
+    class I,J control;
+    class M,N,O ui;
 ```
 
 ### 1. Data Engineering & Interleaving Pipeline
