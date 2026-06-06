@@ -13,7 +13,7 @@
 - Accurate Stem Rendering: 4성부의 기둥 방향(소프라노/테너 위, 알토/베이스 아래)을 완벽하게 분리 렌더링하여 악보 가독성을 극대화했습니다.
 - Engine Stability & Control: V5 하이브리드 엔진의 무한 루프 버그(Continuation 중단 현상)를 완벽하게 수정하였으며, 프론트엔드에서 직접 백엔드를 기동/종료하고 템포(BPM)를 조절할 수 있는 기능을 추가했습니다.
 
-## Technical Architecture
+## 시스템 아키텍처
 
 ```mermaid
 graph TD
@@ -29,13 +29,13 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
 - Chorale Engine (bach_model.pt): 화성의 수직적 결합(Homophony)과 코드 진행(Roman Numeral) 학습에 특화된 모델입니다. 4성부가 동일한 박자 구조 안에서 규칙적으로 움직이는 찬송가풍 음악 생성에 적합합니다.
 - Fugue Engine (fugue_model.pt): 성부의 수평적 독립성(Polyphony)과 모방 대위법 학습에 특화된 전용 모델입니다. [SUBJECT], [ANSWER], [EPISODE]와 같은 거시적 구조 토큰을 학습하여, 각 성부가 서로 다른 리듬으로 교차하며 기승전결을 전개합니다.
 
-### Components
+### 시스템 구성 요소
 - Neural Engine: Transformer-based Generative Models (25M Parameters per engine)
 - Data Engineering: music21 기반의 고도화된 로마자 화성 분석, 전조 분석 및 절대 시간(Global Offset) 인터리빙 토큰 파이프라인
 - Frontend Studio: React, Vite, VexFlow(악보 렌더링), Tone.js(오디오 신디사이저) 기반의 통합 UI 스튜디오
 - Backend API: FastAPI 기반의 비동기 추론 서버
 
-## Getting Started
+## 설치 및 실행 가이드
 
 1. 환경:
    Python 3.10+ 및 CUDA 지원 GPU(RTX 4080/5080 권장) 필요, Node.js 20+
@@ -67,7 +67,7 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
    python scripts/train_fugue.py
    ```
 
-## Continuous Integration
+## 지속적 통합 (CI/CD)
 
 이 프로젝트는 코드 품질 관리 및 협업 시의 안정성 확보를 위해 GitHub Actions 기반의 지속적 통합(CI) 파이프라인을 가동하고 있습니다.
 
