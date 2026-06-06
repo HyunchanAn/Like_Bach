@@ -21,9 +21,20 @@ def test_fugue_transposition():
     from unittest.mock import patch
     
     with patch("builtins.open", MagicMock()), \
-         patch("pickle.load", return_value={'stoi': {}, 'itos': {}}), \
+         patch("pickle.load", return_value={'stoi': {'[PAD]': 0, '[REST]': 1, 'D4.0': 2}, 'itos': {0: '[PAD]', 1: '[REST]', 2: 'D4.0'}}), \
          patch("torch.load", return_value={}), \
+         patch("src.v5.neural_engine.UnifiedTransformerV5") as MockModel, \
          patch("os.path.exists", return_value=True):
+        
+        # Configure the mock model to return a dummy logit tensor
+        mock_instance = MagicMock()
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Return logits of shape (1, 1, vocab_size) where the highest prob is token index 1 ([REST])
+        mock_instance.return_value = (torch.tensor([[[0.0, 10.0, 0.0]]], device=device), None)
+        mock_instance.to.return_value = mock_instance
+        MockModel.return_value = mock_instance
+        
         from src.v5.neural_engine import HybridFugueEngine
         engine = HybridFugueEngine()
     
