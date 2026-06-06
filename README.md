@@ -61,6 +61,12 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
    npm run dev
    ```
 
+6. Run Fugue Engine Preprocessing & Training (Optional):
+   ```bash
+   python scripts/preprocess_fugue.py
+   python scripts/train_fugue.py
+   ```
+
 ## Continuous Integration (지속적 통합)
 
 이 프로젝트는 코드 품질 관리 및 협업 시의 안정성 확보를 위해 GitHub Actions 기반의 지속적 통합(CI) 파이프라인을 가동하고 있습니다.
@@ -76,9 +82,7 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
 
 ## Future Work (앞으로 해야 할 일)
 
-- **1. Fugue Composer 엔진 완전 통합 (Phase 2)**
-  - 현재 기획 및 작성 중인 `fugue_model.pt` 학습 파이프라인(`train_fugue.py`, `preprocess_fugue.py`)을 완성하고, 듀얼 엔진 구조를 백엔드에 완벽히 통합하여 대위법 기반 생성 기능을 출시해야 합니다.
-- **2. 오디오 합성 및 MIDI 렌더링 고도화**
+- **1. 오디오 합성 및 MIDI 렌더링 고도화**
   - Tone.js의 단순 Synth를 넘어, FluidSynth 기반의 사운드폰트(SoundFont)나 Web Audio API를 활용하여 실제 파이프 오르간, 쳄발로 사운드 렌더링 품질을 크게 향상시켜야 합니다.
 - **3. 자동 재작곡 루프 강화 및 오류 교정**
   - 이미 도입된 화성 평가(Harmonic Evaluation) 기반의 조건부 루프를 더욱 엄격하게 튜닝하여, 병행 5/8도 등 대위법적 금기 사항이 발생할 경우 엔진 스스로 해당 마디를 부분 재수정(In-painting)하도록 알고리즘을 고도화해야 합니다.

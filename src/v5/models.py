@@ -2,11 +2,36 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# --- 113M Pro 사양에 맞는 상수 정의 ---
-BLOCK_SIZE = 4096 # 컨텍스트 윈도우 크기
-N_EMBD = 768      # 임베딩 채널 크기
-N_HEAD = 12       # 어텐션 헤드 개수
-N_LAYER = 16      # 트랜스포머 블록 레이어 깊이
+from dataclasses import dataclass
+
+@dataclass
+class BachTransformerConfig:
+    model_scale: str = 'v5_pro'
+    block_size: int = 4096
+    dropout: float = 0.1
+    ignore_index: int = -1
+    is_causal: bool = True
+    
+    def __post_init__(self):
+        if self.model_scale == 'small':
+            self.n_embd = 384
+            self.n_head = 6
+            self.n_layer = 6
+        elif self.model_scale == 'base':
+            self.n_embd = 768
+            self.n_head = 12
+            self.n_layer = 12
+        elif self.model_scale == 'large':
+            self.n_embd = 1024
+            self.n_head = 16
+            self.n_layer = 24
+        else:
+            self.n_embd = 768
+            self.n_head = 12
+            self.n_layer = 16 # Default v5-Pro 113M config
+            
+# Backward compatibility variables if needed (though removed internally)
+BLOCK_SIZE = 4096
 DROPOUT = 0.1
 
 class RotaryEmbedding(nn.Module):
@@ -33,14 +58,14 @@ def rotate_half(x):
 
 class Head(nn.Module):
     """RoPE가 통합된 단일 인과적/비인과적 셀프 어텐션 헤드 모듈입니다."""
-    def __init__(self, head_size, is_causal=True):
+    def __init__(self, config: BachTransformerConfig, head_size: int):
         super().__init__()
-        self.key = nn.Linear(N_EMBD, head_size, bias=False)
-        self.query = nn.Linear(N_EMBD, head_size, bias=False)
-        self.value = nn.Linear(N_EMBD, head_size, bias=False)
-        self.is_causal = is_causal
-        self.register_buffer('tril', torch.tril(torch.ones(BLOCK_SIZE, BLOCK_SIZE)), persistent=False)
-        self.dropout = nn.Dropout(DROPOUT)
+        self.key = nn.Linear(config.n_embd, head_size, bias=False)
+        self.query = nn.Linear(config.n_embd, head_size, bias=False)
+        self.value = nn.Linear(config.n_embd, head_size, bias=False)
+        self.is_causal = config.is_causal
+        self.register_buffer('tril', torch.tril(torch.ones(config.block_size, config.block_size)), persistent=False)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x, cos=None, sin=None):
         B, T, C = x.shape
@@ -64,11 +89,12 @@ class Head(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     """다중 헤드 어텐션 연산 블록입니다."""
-    def __init__(self, num_heads, head_size, is_causal=True):
+    def __init__(self, config: BachTransformerConfig):
         super().__init__()
-        self.heads = nn.ModuleList([Head(head_size, is_causal=is_causal) for _ in range(num_heads)])
-        self.proj = nn.Linear(head_size * num_heads, N_EMBD)
-        self.dropout = nn.Dropout(DROPOUT)
+        head_size = config.n_embd // config.n_head
+        self.heads = nn.ModuleList([Head(config, head_size) for _ in range(config.n_head)])
+        self.proj = nn.Linear(config.n_embd, config.n_embd)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x, cos=None, sin=None):
         out = torch.cat([h(x, cos=cos, sin=sin) for h in self.heads], dim=-1)
@@ -77,13 +103,13 @@ class MultiHeadAttention(nn.Module):
 
 class FeedForward(nn.Module):
     """전형적인 다층 퍼셉트론 피드포워드 모듈입니다."""
-    def __init__(self, n_embd):
+    def __init__(self, config: BachTransformerConfig):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embd, 4 * n_embd),
+            nn.Linear(config.n_embd, 4 * config.n_embd),
             nn.ReLU(),
-            nn.Linear(4 * n_embd, n_embd),
-            nn.Dropout(DROPOUT),
+            nn.Linear(4 * config.n_embd, config.n_embd),
+            nn.Dropout(config.dropout),
         )
 
     def forward(self, x):
@@ -91,13 +117,12 @@ class FeedForward(nn.Module):
 
 class Block(nn.Module):
     """LayerNorm과 Residual Connection이 포함된 표준 트랜스포머 블록입니다."""
-    def __init__(self, n_embd, n_head, is_causal=True):
+    def __init__(self, config: BachTransformerConfig):
         super().__init__()
-        head_size = n_embd // n_head
-        self.sa = MultiHeadAttention(n_head, head_size, is_causal=is_causal)
-        self.ffwd = FeedForward(n_embd)
-        self.ln1 = nn.LayerNorm(n_embd)
-        self.ln2 = nn.LayerNorm(n_embd)
+        self.sa = MultiHeadAttention(config)
+        self.ffwd = FeedForward(config)
+        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.ln2 = nn.LayerNorm(config.n_embd)
 
     def forward(self, x, cos=None, sin=None):
         x = x + self.sa(self.ln1(x), cos=cos, sin=sin)
@@ -105,27 +130,28 @@ class Block(nn.Module):
         return x
 
 class UnifiedTransformerV5(nn.Module):
-    """v5-Pro 113M 모델 가중치와 호환되는 최신 통합 대위법 트랜스포머 신경망입니다."""
-    def __init__(self, vocab_size, device="cuda", ignore_index=-1, is_causal=True):
+    """v5 모델 가중치와 호환되는 최신 통합 대위법 트랜스포머 신경망입니다."""
+    def __init__(self, vocab_size, device="cuda", config: BachTransformerConfig = None, ignore_index=-1, is_causal=True):
         super().__init__()
         self.device = device
-        self.ignore_index = ignore_index
-        self.is_causal = is_causal
+        self.config = config if config is not None else BachTransformerConfig(ignore_index=ignore_index, is_causal=is_causal)
+        self.ignore_index = self.config.ignore_index
+        self.is_causal = self.config.is_causal
         
-        # 113M Pro 다중 속성 임베딩
-        self.token_embedding_table = nn.Embedding(vocab_size, N_EMBD)
-        self.pitch_class_embedding_table = nn.Embedding(13, N_EMBD)
-        self.octave_embedding_table = nn.Embedding(11, N_EMBD)
-        self.voice_embedding_table = nn.Embedding(6, N_EMBD)
+        # 다중 속성 임베딩
+        self.token_embedding_table = nn.Embedding(vocab_size, self.config.n_embd)
+        self.pitch_class_embedding_table = nn.Embedding(13, self.config.n_embd)
+        self.octave_embedding_table = nn.Embedding(11, self.config.n_embd)
+        self.voice_embedding_table = nn.Embedding(6, self.config.n_embd)
         
         # RoPE 모듈
-        self.rope = RotaryEmbedding(dim=64, max_seq_len=BLOCK_SIZE)
+        self.rope = RotaryEmbedding(dim=64, max_seq_len=self.config.block_size)
         
-        # 16 레이어 블록 구성
-        self.blocks = nn.ModuleList([Block(N_EMBD, n_head=N_HEAD, is_causal=is_causal) for _ in range(N_LAYER)])
+        # 레이어 블록 구성
+        self.blocks = nn.ModuleList([Block(self.config) for _ in range(self.config.n_layer)])
         
-        self.ln_f = nn.LayerNorm(N_EMBD)
-        self.lm_head = nn.Linear(N_EMBD, vocab_size) # bias=True 디폴트
+        self.ln_f = nn.LayerNorm(self.config.n_embd)
+        self.lm_head = nn.Linear(self.config.n_embd, vocab_size) # bias=True 디폴트
         
         # 토큰별 속성 룩업 맵 초기화 및 로드
         pitch_class_map = torch.zeros(vocab_size, dtype=torch.long)
@@ -200,7 +226,7 @@ class UnifiedTransformerV5(nn.Module):
 
     def generate(self, idx, max_new_tokens, temperature=1.0):
         for _ in range(max_new_tokens):
-            idx_cond = idx[:, -BLOCK_SIZE:]
+            idx_cond = idx[:, -self.config.block_size:]
             logits, loss = self(idx_cond)
             logits = logits[:, -1, :] / temperature
             probs = F.softmax(logits, dim=-1)

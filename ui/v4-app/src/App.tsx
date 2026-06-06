@@ -100,7 +100,9 @@ const App: React.FC = () => {
             started = true;
             break;
           }
-        } catch (err) {}
+        } catch (err) {
+          // ignore
+        }
       }
       if (!started) {
         setBackendStatus('offline');
@@ -230,7 +232,9 @@ const App: React.FC = () => {
               setBackendStatus('online');
               break;
             }
-          } catch (err) {}
+          } catch (err) {
+            // ignore
+          }
         }
       } catch (startErr) {
         console.error("Failed to trigger start backend middleware:", startErr);
