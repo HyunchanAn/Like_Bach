@@ -37,37 +37,37 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
 
 ## Getting Started
 
-1. Environment:
+1. 환경:
    Python 3.10+ 및 CUDA 지원 GPU(RTX 4080/5080 권장) 필요, Node.js 20+
 
-2. Run Advanced Preprocessing:
+2. 학습 전처리 시작:
    ```bash
    python src/v4/preprocess.py
    ```
 
-3. Run Training:
+3. 학습 시작:
    ```bash
    python src/v4/train.py
    ```
 
-4. Run Backend Server:
+4. 백엔드 서버 실행:
    ```bash
    python src/v4/api.py
    ```
 
-5. Run Frontend UI:
+5. 프론트 실행:
    ```bash
    cd ui/v4-app
    npm run dev
    ```
 
-6. Run Fugue Engine Preprocessing & Training (Optional):
+6. 푸가 엔진 실행:
    ```bash
    python scripts/preprocess_fugue.py
    python scripts/train_fugue.py
    ```
 
-## Continuous Integration (지속적 통합)
+## Continuous Integration
 
 이 프로젝트는 코드 품질 관리 및 협업 시의 안정성 확보를 위해 GitHub Actions 기반의 지속적 통합(CI) 파이프라인을 가동하고 있습니다.
 
@@ -80,7 +80,7 @@ v4.6부터는 수직적 코랄과 수평적 푸가의 본질적인 질감 차이
 
 상세한 기술 개발 과정 및 최적화 이력은 development_log.txt에서 확인할 수 있습니다. 오염된 이전 버전의 모델과 실패 기록은 legacy/v4.5-bugged 브랜치에 안전하게 격리 보관되어 있습니다.
 
-## Future Work (앞으로 해야 할 일)
+## Future Work
 
 - **1. 오디오 합성 및 MIDI 렌더링 고도화**
   - Tone.js의 단순 Synth를 넘어, FluidSynth 기반의 사운드폰트(SoundFont)나 Web Audio API를 활용하여 실제 파이프 오르간, 쳄발로 사운드 렌더링 품질을 크게 향상시켜야 합니다.
