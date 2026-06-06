@@ -18,7 +18,7 @@ def test_fugue_transposition():
     V3 (Tenor): Subject (transposed by -12 semitones, Octave down)
     V4 (Bass): Answer (transposed by -19 semitones, Octave + Perfect 5th down)
     """
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
     
     with patch("builtins.open", MagicMock()), \
          patch("pickle.load", return_value={'stoi': {}, 'itos': {}}), \
