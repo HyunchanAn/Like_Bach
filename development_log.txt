@@ -525,3 +525,27 @@ Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
 
 2026-06-02 00:47:06
 - README.md 아키텍처 다이어그램 Mermaid 문법 오류(괄호 등 특수문자 따옴표 처리) 수정
+
+[2026-06-06 23:59] V5 Hybrid Fugue Engine UnboundLocalError 핫픽스
+- 현상: 프론트엔드에서 FUGUE 작곡 버튼 클릭 시 순간적으로 PROCESSING 상태로 변한 후 즉각적으로 원래대로 돌아가며(Silent fail) 생성 무시 현상 발생.
+- 원인: 이전 VRAM 캐시 비우기 최적화 과정에서 `generate_fugue` 메서드 마지막의 `try` 블록 내부에 명시한 `import torch` 구문이 해당 함수의 스코프(Scope)를 오염시켜, 상단에서 사용된 `torch.tensor` 호출이 `UnboundLocalError (cannot access local variable 'torch')`를 발생시킴. SSE 통신 도중 에러가 발생하여 `error` 타입 메시지 전송 후 스트림이 끊어짐.
+- 조치: 파일 최상단에서 이미 `import torch`가 글로벌로 선언되어 있으므로, `generate_fugue` 내부의 불필요한 `import torch` 구문을 삭제하여 정상적인 VRAM 릴리즈와 추론이 진행되도록 복구 완료.
+
+[2026-06-07 00:01] 백엔드 기동 버튼 토글(On/Off) 기능 추가
+- 현상 및 요구사항: UI의 CPU 상태 표시 버튼이 백엔드를 켜는 기능만 있고, 수동으로 끄는 기능이 없어 포트 제어에 불편함 존재.
+- 조치 내용: 
+  1. `vite.config.ts`에 `/api-stop-backend` 미들웨어를 신규 추가하여, 호출 시 Windows `taskkill` 명령어로 8000번 포트 및 백엔드 파이썬 프로세스를 안전하게 강제 종료하도록 구현.
+  2. `App.tsx`의 `checkOrStartBackend` 함수에 조건부 분기를 추가하여, 현재 상태가 'online'일 경우 종료 미들웨어를 호출하도록 토글 기능 완성.
+
+[2026-06-07 00:02] 프론트엔드 UI 템포(BPM) 조절 기능 추가
+- 현상 및 요구사항: 하단 상태바의 'TEMPO: 120 BPM' 텍스트가 고정되어 있으며, 실제 재생(`handlePlay`) 시에는 80 BPM으로 하드코딩되어 있어 재생 속도를 조절할 수 없었음.
+- 조치 내용: 
+  1. `App.tsx`에 `bpm` 상태(state)를 추가하고 기본값을 120으로 설정함.
+  2. 하단 상태바의 템포 표시 텍스트를 `<input type="number">` 입력 폼으로 교체하여, 사용자가 40~240 사이의 숫자를 직접 입력하거나 조절할 수 있도록 UI 개선.
+  3. `handlePlay` 메서드 내부의 오디오 스케줄링(Tone.js) 및 악보 스크롤 애니메이션 루프 로직이 하드코딩된 값이 아닌 사용자가 설정한 `bpm` 상태 값을 참조하도록 연동 완료.
+
+[2026-06-06 15:10] 브라우저 환경 40마디 푸가 테마 입력 및 생성 테스트
+- Measures 슬라이더 40마디 정상 조작 및 FUGUE 모드 전환 완료.
+- 단축키를 이용해 1마디 분량의 4음표 주제 선율 입력 성공.
+- 생성 요청 후 AI Engine Neural Activity Console에서 '=== Measure 4 Exposition ===', '4성부 강제 스케줄링 진행 중' 등의 로그가 출력되며 정상 동작 중임을 확인.
+

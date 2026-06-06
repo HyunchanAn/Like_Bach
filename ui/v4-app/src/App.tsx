@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [midiData, setMidiData] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [bpm, setBpm] = useState(120);
   
   const synthRef = useRef<Tone.PolySynth | null>(null);
   const engineRef = useRef<NWCKeyboardEngine | null>(null);
@@ -66,9 +67,23 @@ const App: React.FC = () => {
     return false;
   };
 
-  // 백엔드 자동 기동 및 체크
+  // 백엔드 수동 기동/종료 토글
   const checkOrStartBackend = async () => {
     if (generatingMode !== 'none') return;
+    
+    // 백엔드가 켜져 있다면 끄기
+    if (backendStatus === 'online') {
+      setBackendStatus('checking');
+      try {
+        await axios.get(`/api-stop-backend`);
+      } catch (e) {
+        console.error("Failed to stop backend:", e);
+      }
+      setBackendStatus('offline');
+      return;
+    }
+
+    // 백엔드가 꺼져 있다면 켜기
     setBackendStatus('checking');
     const isReady = await checkBackendHealth();
     if (isReady) return;
@@ -364,15 +379,14 @@ const App: React.FC = () => {
     transport.cancel();
     Tone.Draw.cancel();
     
-    const currentBpm = 80;
-    transport.bpm.value = currentBpm;
+    transport.bpm.value = bpm;
     const themeColor = isDarkMode ? "#ffffff" : "#1e293b";
 
     state.notes.forEach(note => {
       if (note.pitch === -1) return; 
       const freq = Tone.Frequency(note.pitch, "midi").toFrequency();
-      const timeInSec = note.offset * (60 / currentBpm);
-      const durationInSec = note.duration * (60 / currentBpm);
+      const timeInSec = note.offset * (60 / bpm);
+      const durationInSec = note.duration * (60 / bpm);
       
       transport.schedule((t) => {
         synthRef.current?.triggerAttackRelease(freq, durationInSec * 0.85, t);
@@ -386,7 +400,7 @@ const App: React.FC = () => {
     const updateVisuals = () => {
       if (Tone.getTransport().state !== "started") return;
 
-      const currentBeat = Tone.getTransport().seconds * (currentBpm / 60);
+      const currentBeat = Tone.getTransport().seconds * (bpm / 60);
       
       // 현재 프레임에서 활성화된 노트 식별
       const currentActiveIds = new Set<string>();
@@ -444,7 +458,7 @@ const App: React.FC = () => {
     
     // 마지막 노트 종료 시 정지 처리
     const totalDurationBeats = state.notes.length > 0 ? Math.max(...state.notes.map(n => n.offset + n.duration)) : 0;
-    const totalDurationSec = (totalDurationBeats * (60 / currentBpm)) + 1;
+    const totalDurationSec = (totalDurationBeats * (60 / bpm)) + 1;
     
     transport.schedule(() => {
       setIsPlaying(false);
@@ -780,7 +794,28 @@ const App: React.FC = () => {
               <span>PROGRESS: {Math.floor(state.currentTime / 4) + 1} / {targetMeasures} MEASURES</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
-              <span>TEMPO: 120 BPM</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 'bold' }}>TEMPO:</span>
+                <input 
+                  type="number" 
+                  value={bpm} 
+                  onChange={(e) => setBpm(Number(e.target.value))}
+                  min="40"
+                  max="240"
+                  style={{
+                    width: '60px',
+                    background: 'var(--bg-main)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    padding: '2px 4px',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    textAlign: 'center'
+                  }}
+                />
+                <span style={{ fontWeight: 'bold' }}>BPM</span>
+              </div>
               <span style={{ opacity: 0.2 }}>|</span>
               <span style={{ color: 'var(--accent)' }}>LIKE BACH STUDIO v4.6.0</span>
             </div>

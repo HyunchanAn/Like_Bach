@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { spawn } from 'child_process'
+import { spawn, exec } from 'child_process'
 import path from 'path'
 import fs from 'fs'
 
@@ -37,6 +37,20 @@ export default defineConfig({
               res.end(JSON.stringify({ success: true }))
             } catch (error: any) {
               console.error('Failed to start backend via spawn:', error)
+              res.statusCode = 500
+              res.end(JSON.stringify({ success: false, error: error.message }))
+            }
+          } else if (req.url === '/api-stop-backend') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+              exec('taskkill /fi "windowtitle eq Like_Bach_Backend_Process*" /t /f', () => {
+                exec('for /f "tokens=5" %a in (\'netstat -ano ^| findstr :8000 ^| findstr LISTENING\') do ( taskkill /pid %a /t /f )', () => {
+                  res.statusCode = 200
+                  res.end(JSON.stringify({ success: true }))
+                })
+              })
+            } catch (error: any) {
+              console.error('Failed to stop backend via spawn:', error)
               res.statusCode = 500
               res.end(JSON.stringify({ success: false, error: error.message }))
             }

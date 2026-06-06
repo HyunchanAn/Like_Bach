@@ -316,6 +316,11 @@ class HybridFugueEngine:
                         current_seq=current_seq
                     )
                     
+                    # Prevent generating structural tokens in the middle of a voice
+                    for tid, tok in self.tokenizer.stoi.items():
+                        if tok in ["[SUBJECT]", "[ANSWER]", "[EPISODE]", "[EPISODE_MODULATION]", "[TS_4/4]", "[KEY_C]"]:
+                            filtered_logits[0, tid] = -1e9
+                    
                     probs = F.softmax(filtered_logits / temperature, dim=-1)
                     idx_next = torch.multinomial(probs, num_samples=1)
                     token = self.tokenizer.itos.get(idx_next.item(), "[UNK]")
@@ -359,7 +364,6 @@ class HybridFugueEngine:
         # 추론 연산 종료 후 VRAM 캐시 비우기 (메모리 단편화 및 누수 억제)
         try:
             import gc
-            import torch
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
