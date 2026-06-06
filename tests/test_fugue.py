@@ -18,8 +18,14 @@ def test_fugue_transposition():
     V3 (Tenor): Subject (transposed by -12 semitones, Octave down)
     V4 (Bass): Answer (transposed by -19 semitones, Octave + Perfect 5th down)
     """
-    from src.v5.neural_engine import HybridFugueEngine
-    engine = HybridFugueEngine()
+    from unittest.mock import patch, MagicMock
+    
+    with patch("builtins.open", MagicMock()), \
+         patch("pickle.load", return_value={'stoi': {}, 'itos': {}}), \
+         patch("torch.load", return_value={}), \
+         patch("os.path.exists", return_value=True):
+        from src.v5.neural_engine import HybridFugueEngine
+        engine = HybridFugueEngine()
     
     # 1-measure subject
     subject_notes = [
