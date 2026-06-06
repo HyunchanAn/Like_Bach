@@ -315,8 +315,11 @@ class NeuralBachEngine:
                     bad_dur_indices = [tid for tid, dur in self.fugue_token_durations.items() if dur >= 3.0]
                     if bad_dur_indices: logits[0, -1, bad_dur_indices] = -1e9
                     
-                    # 16분음표, 32분음표 폭주 억제 (VexFlow 겹침 방지 및 르네상스/바로크 텍스처 보존)
-                    short_dur_indices = [tid for tid, dur in self.fugue_token_durations.items() if dur <= 0.25]
+                    # 32분음표 차단 및 16분음표 억제 (VexFlow 겹침 방지)
+                    too_short_indices = [tid for tid, dur in self.fugue_token_durations.items() if dur < 0.25]
+                    if too_short_indices: logits[0, -1, too_short_indices] = -1e9
+                    
+                    short_dur_indices = [tid for tid, dur in self.fugue_token_durations.items() if dur == 0.25]
                     if short_dur_indices: logits[0, -1, short_dur_indices] -= 8.0
                     
                 # Repetition Penalty
@@ -469,6 +472,11 @@ class NeuralBachEngine:
                     bad_dur_indices = [tid for tid, d in self.token_durations.items() if d >= 3.0]
                     if bad_dur_indices:
                         logits[0, -1, bad_dur_indices] = -1e9
+                    
+                    # 32분음표 등 지나치게 짧은 음표 차단 (0.25 미만)
+                    short_dur_indices = [tid for tid, d in self.token_durations.items() if d < 0.25]
+                    if short_dur_indices:
+                        logits[0, -1, short_dur_indices] = -1e9
                         
                 # Repetition Penalty
                 last_few_tokens = current_seq[-10:]

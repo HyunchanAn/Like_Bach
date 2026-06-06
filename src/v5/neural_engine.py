@@ -11,21 +11,37 @@ class HybridFugueEngine:
     def __init__(self, model_path='data/processed/v5/fugue_model_v5.pt', tokenizer_path='data/processed/v5/fugue_vocab_v5.pkl'):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        with open(tokenizer_path, 'rb') as f:
-            vocab_dict = pickle.load(f)
-            class MockTokenizer: pass
-            self.tokenizer = MockTokenizer()
-            self.tokenizer.stoi = vocab_dict['stoi']
-            self.tokenizer.itos = vocab_dict['itos']
-            self.tokenizer.vocab_size = len(self.tokenizer.stoi)
+        # determine scale from model_path
+        scale = "v5_pro"
+        if "base" in model_path or model_path.endswith("fugue_model_v5.pt"): # Original v5 model was base
+            scale = "v5_base"
+        elif "large" in model_path:
+            scale = "v5_large"
+            
+        print(f"Initializing HybridFugueEngine with scale={scale} based on path {model_path}")
+        from src.v5.models import BachTransformerConfig
+        config = BachTransformerConfig(model_scale=scale, is_causal=True)
+        
+        try:
+            with open(tokenizer_path, 'rb') as f:
+                vocab_dict = pickle.load(f)
+                class MockTokenizer: pass
+                self.tokenizer = MockTokenizer()
+                self.tokenizer.stoi = vocab_dict['stoi']
+                self.tokenizer.itos = vocab_dict['itos']
+                self.tokenizer.vocab_size = len(self.tokenizer.stoi)
+                self.tokenizer.encode = lambda seq: [self.tokenizer.stoi.get(t, self.tokenizer.stoi.get("[UNK]", 0)) for t in seq]
+        except Exception as e:
+            from src.v5.models import BachTokenizerV5
+            self.tokenizer = BachTokenizerV5()
             self.tokenizer.encode = lambda seq: [self.tokenizer.stoi.get(t, self.tokenizer.stoi.get("[UNK]", 0)) for t in seq]
             
-        self.model = UnifiedTransformerV5(self.tokenizer.vocab_size, device=self.device, is_causal=True).to(self.device)
-        
-        if os.path.exists(model_path):
+        self.model = UnifiedTransformerV5(self.tokenizer.vocab_size, device=self.device, config=config).to(self.device)
+        try:
             self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
-            self.model.eval()
-            print(">>> V5 Hybrid Fugue Engine loaded successfully.")
+            print(f"Successfully loaded V5 weights from {model_path}")
+        except Exception as e:
+            print(f"Warning: Could not load V5 weights: {e}")
             
         # Cache token mappings for fast NumPy validation
         self.token_pitches = {}
@@ -113,6 +129,11 @@ class HybridFugueEngine:
         # 5. 과도한 쉼표 제약 및 듀레이션 제약
         rest_tid = self.tokenizer.stoi.get("[REST]", None)
         
+        # 5-0. 32분음표 등 지나치게 짧은 음표 차단 (0.25 미만)
+        for tid, dur in self.token_durations.items():
+            if dur < 0.25:
+                masked_logits[0, tid] = -1e9
+                
         # 5-1. 현재 성부의 최근 생성 토큰들을 역순으로 추적
         voice_tokens = []
         i = len(current_seq) - 1
