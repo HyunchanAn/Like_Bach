@@ -507,15 +507,15 @@ class NeuralBachEngine:
             try:
                 self.model.load_state_dict(torch.load(model_path, map_location=self.device))
                 self.model.eval()
-            except: pass
+            except Exception: pass
             
         fugue_model_path = 'models/v4/fugue_model.pt'
         if os.path.exists(fugue_model_path):
             try:
                 self.fugue_model.load_state_dict(torch.load(fugue_model_path, map_location=self.device))
                 self.fugue_model.eval()
-                print(f"Dual Neural Engine (Chorale & Fugue) loaded.")
-            except: pass
+                print("Dual Neural Engine (Chorale & Fugue) loaded.")
+            except Exception: pass
 
         # Pre-build a map of token IDs to pitch and duration values for fast logit masking
         self.token_pitches = {}
@@ -550,7 +550,7 @@ class NeuralBachEngine:
                                 self.bad_pitch_indices.append(token_id)
                     if len(parts) >= 3 and parts[2].startswith("D"):
                         self.token_durations[token_id] = float(parts[2][1:])
-                except: pass
+                except Exception: pass
 
         self.fugue_token_pitches = {}
         self.fugue_token_voices = {}
@@ -563,7 +563,7 @@ class NeuralBachEngine:
             if token.startswith("[TIME_"):
                 try:
                     self.fugue_token_times[token_id] = float(token[6:-1])
-                except: pass
+                except Exception: pass
             elif token.startswith("[REMAIN_"):
                 self.fugue_token_remains.append(token_id)
             elif token.startswith("[V"):
@@ -580,7 +580,7 @@ class NeuralBachEngine:
                                 self.fugue_bad_pitch_indices.append(token_id)
                     if len(parts) >= 3 and parts[2].startswith("D"):
                         self.fugue_token_durations[token_id] = float(parts[2][1:])
-                except: pass
+                except Exception: pass
 
     def _get_active_pitches_at_current_time(self, current_seq):
         active_pitches = set()
@@ -592,7 +592,7 @@ class NeuralBachEngine:
                     parts = token.split()
                     if len(parts) >= 2 and parts[1].startswith("P"):
                         active_pitches.add(int(parts[1][1:]))
-                except:
+                except Exception:
                     pass
         return active_pitches
 
@@ -725,13 +725,13 @@ class NeuralBachEngine:
             
             # 대주제(Countersubject) AI 생성 호출
             if v == "[V2]":
-                add_debug(curr_measure, f"-> [V1] 대주제(CS1) AI 생성 호출")
+                add_debug(curr_measure, "-> [V1] 대주제(CS1) AI 생성 호출")
                 self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]"], p, use_fugue_model=True)
             elif v == "[V3]":
-                add_debug(curr_measure, f"-> [V1, V2] 대주제(CS2, CS1) AI 생성 호출")
+                add_debug(curr_measure, "-> [V1, V2] 대주제(CS2, CS1) AI 생성 호출")
                 self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]", "[V2]"], p, use_fugue_model=True)
             elif v == "[V4]":
-                add_debug(curr_measure, f"-> [V1, V2, V3] 대주제(CS3, CS2, CS1) AI 생성 호출")
+                add_debug(curr_measure, "-> [V1, V2, V3] 대주제(CS3, CS2, CS1) AI 생성 호출")
                 self._fill_voices(current_seq, target_measures, curr_measure, temperature, ["[V1]", "[V2]", "[V3]"], p, use_fugue_model=True)
 
         current_seq.append("[EPISODE]")
@@ -841,7 +841,7 @@ class NeuralBachEngine:
                         off = float(token[6:-1])
                         curr_measure = int(off // 4)
                         current_offset = off
-                    except: pass
+                    except Exception: pass
                     
             except Exception as e:
                 import traceback
@@ -977,7 +977,7 @@ class NeuralBachEngine:
                     try:
                         off = float(token[6:-1])
                         curr_measure = int(off // 4)
-                    except: pass
+                    except Exception: pass
                     
             except Exception as e:
                 break
@@ -999,7 +999,7 @@ class NeuralBachEngine:
                 if token.startswith("[ROMAN_"):
                     current_seq.append(token)
                     break
-        except: pass
+        except Exception: pass
 
     def _fill_voices(self, current_seq, target_measures, curr_measure, temperature, required_voices, base_pitch, use_fugue_model=False):
         found_voices = []
@@ -1049,7 +1049,7 @@ class NeuralBachEngine:
                     current_seq.append(token)
                 
                 if len(found_voices) == len(required_voices): break
-            except: break
+            except Exception: break
                 
         default_pitches = {
             "[V1]": 70, # Soprano
@@ -1076,7 +1076,7 @@ class NeuralBachEngine:
         for token in tokens:
             if token.startswith("[TIME_"):
                 try: current_offset = float(token[6:-1])
-                except: pass
+                except Exception: pass
             elif token.startswith("[V"):
                 try:
                     parts = token.split()
@@ -1088,7 +1088,7 @@ class NeuralBachEngine:
                     if key not in seen_notes:
                         raw_notes.append({"pitch": p, "duration": d, "offset": current_offset, "voice": v_num})
                         seen_notes.add(key)
-                except: pass
+                except Exception: pass
                 
         # 성부별 오버랩 방지 (단성부 타임라인 정돈)
         voice_groups = {1: [], 2: [], 3: [], 4: []}
