@@ -562,3 +562,7 @@ Like Bach v4.5 - 무한 루프 버그 픽스 및 프론트엔드 UI 수정
 - API 런타임 테스트 시 pickle 로딩에서 tokenizer.pkl이 src.v4.models 의존성을 찾는 문제 식별하여 sys.modules 목킹으로 수정.
 - test_backend.py 및 로컬 환경 파일들(README.md, initial.bat, vite.config.ts) v5에 맞게 업데이트 완료.
 - pytest 검증 100% 통과.
+[2026-06-07 19:14] CI/CD 파이프라인(Ruff Lint) 오류 수정 완료 (Hyunchan An)
+- src/v5/neural_engine.py 병합 과정에서 발생한 Ruff 린팅 오류(E722 bare except, F541 빈 f-string) 16건 파악.
+- except 구문을 except Exception으로 교체하고 불필요한 f-string 접두사 제거하여 코드 품질 향상.
+- 수정 사항 커밋 후 GitHub Actions 파이프라인 100% 통과(Success) 확인.
