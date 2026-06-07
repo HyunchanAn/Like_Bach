@@ -91,7 +91,7 @@ graph TD
 
 4. 백엔드 서버 실행:
    ```bash
-   python src/v4/api.py
+   python src/v5/api.py
    ```
 
 5. 프론트 실행:

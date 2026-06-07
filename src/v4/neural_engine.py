@@ -134,6 +134,7 @@ class NeuralBachEngine:
                 active_voices.add(token[:4])
         return active_voices
 
+    @torch.no_grad()
     def generate_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         best_notes = None
         best_score = -1.0
@@ -153,6 +154,7 @@ class NeuralBachEngine:
                 
         return best_notes
 
+    @torch.no_grad()
     def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
         best_notes = None
         best_score = -1.0

@@ -16,7 +16,7 @@ if exist .venv\Scripts\activate.bat (
 )
 
 rem 중복 실행 방지 및 추적을 위해 창 제목 고정하여 백그라운드 실행
-start /min "Like_Bach_Backend_Process" python src/v4/api.py
+start /min "Like_Bach_Backend_Process" python src/v5/api.py
 timeout /t 3 /nobreak > nul
 
 rem [Step 2] 프론트엔드 Vite 개발 서버 구동 (--no-open 옵션으로 중복 브라우저 방지)

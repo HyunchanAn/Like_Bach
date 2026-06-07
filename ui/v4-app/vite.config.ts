@@ -16,8 +16,8 @@ export default defineConfig({
             const projectRoot = path.resolve(__dirname, '../../')
             const hasVenv = fs.existsSync(path.join(projectRoot, '.venv', 'Scripts', 'activate.bat'))
             const command = hasVenv
-              ? 'call .venv\\Scripts\\activate.bat && python src/v4/api.py'
-              : 'python src/v4/api.py'
+              ? 'call .venv\\Scripts\\activate.bat && python src/v5/api.py'
+              : 'python src/v5/api.py'
             
             res.setHeader('Content-Type', 'application/json')
             try {

@@ -47,10 +47,9 @@ def notes_to_midi_base64(notes_list):
 # Project root 추가
 sys.path.append(os.getcwd())
 
-from src.v4.neural_engine import NeuralBachEngine
-from src.v5.neural_engine import HybridFugueEngine
+from src.v5.neural_engine import NeuralBachEngine, HybridFugueEngine
 
-app = FastAPI(title="Like Bach v4.5 API Engine")
+app = FastAPI(title="Like Bach v5 API Engine")
 
 # CORS 설정 (Frontend 연동용)
 app.add_middleware(
