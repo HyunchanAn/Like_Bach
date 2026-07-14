@@ -125,3 +125,7 @@ graph TD
   - Tone.js의 단순 Synth를 넘어, FluidSynth 기반의 사운드폰트(SoundFont)나 Web Audio API를 활용하여 실제 파이프 오르간, 쳄발로 사운드 렌더링 품질을 크게 향상시켜야 합니다.
 - **3. 자동 재작곡 루프 강화 및 오류 교정**
   - 이미 도입된 화성 평가(Harmonic Evaluation) 기반의 조건부 루프를 더욱 엄격하게 튜닝하여, 병행 5/8도 등 대위법적 금기 사항이 발생할 경우 엔진 스스로 해당 마디를 부분 재수정(In-painting)하도록 알고리즘을 고도화해야 합니다.
+
+## References
+
+- [SDAD (SPEC-Driven AI Development)](https://github.com/LiveTrack-X/spec-driven-ai-development)
