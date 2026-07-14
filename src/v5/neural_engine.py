@@ -85,6 +85,7 @@ class HybridFugueEngine:
                     active_other_voices.append((note['voice'], note['pitch']))
                     
         counterpoint_violators = set()
+        absolute_violators = set()
         
         for tid, p in self.token_pitches.items():
             if p < v_min or p > v_max:
@@ -92,6 +93,7 @@ class HybridFugueEngine:
                 continue
                 
             is_violator = False
+            is_absolute_violator = False
             
             if last_pitch is not None:
                 interval = abs(p - last_pitch)
@@ -102,26 +104,26 @@ class HybridFugueEngine:
             
             for other_v, other_p in active_other_voices:
                 harm_interval = abs(p - other_p)
-                if harm_interval in [1, 11]:
-                    is_violator = True
-                    break
-                if harm_interval == 6:
-                    is_violator = True
-                    break
                 if harm_interval == 0:
+                    is_absolute_violator = True
+                    break
+                if harm_interval in [1, 11, 6]:
                     is_violator = True
                     break
                     
                 if other_v < voice: 
                     if p >= other_p: 
-                        is_violator = True
+                        is_absolute_violator = True
                         break
                 elif other_v > voice: 
                     if p <= other_p: 
-                        is_violator = True
+                        is_absolute_violator = True
                         break
                         
-            if is_violator:
+            if is_absolute_violator:
+                absolute_violators.add(tid)
+                masked_logits[0, tid] = -1e9
+            elif is_violator:
                 counterpoint_violators.add(tid)
                 masked_logits[0, tid] = -1e9
                                 
@@ -187,7 +189,8 @@ class HybridFugueEngine:
             num_active_pitches = sum([1 for tid in self.token_pitches if masked_logits[0, tid] > -1e8])
             if num_active_pitches < 3:
                 for tid in counterpoint_violators:
-                    masked_logits[0, tid] = logits[0, tid] - SOFT_PENALTY_VALUE
+                    if tid not in absolute_violators:
+                        masked_logits[0, tid] = logits[0, tid] - SOFT_PENALTY_VALUE
                     
         return masked_logits
 

@@ -1,0 +1,17 @@
+version: 2
+scale: standard
+execution_scope: packet
+active_packet:
+  id: packet-001
+  description: "Initial SDAD standard scale setup"
+validation_for: packet-001
+validation:
+  status: pending
+owner_gates:
+  - destructive_changes
+  - dependency_updates
+  - release_push
+current_handoff: docs/sdad/handoffs/2026-07-14-legacy-migration-complete.md
+routed_docs:
+  - docs/INDEX.md
+  - SPEC/SPEC-COMPLETE.md

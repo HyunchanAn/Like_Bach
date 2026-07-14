@@ -79,12 +79,13 @@ class Head(nn.Module):
             q = (q * cos_u) + (rotate_half(q) * sin_u)
             k = (k * cos_u) + (rotate_half(k) * sin_u)
             
-        wei = q @ k.transpose(-2, -1) * k.shape[-1]**-0.5
-        if self.is_causal:
-            wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
-        wei = F.softmax(wei, dim=-1)
-        wei = self.dropout(wei)
-        out = wei @ v
+        dropout_p = self.dropout.p if self.training else 0.0
+        out = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=None,
+            dropout_p=dropout_p,
+            is_causal=self.is_causal
+        )
         return out
 
 class MultiHeadAttention(nn.Module):
