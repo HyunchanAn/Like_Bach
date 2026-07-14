@@ -275,6 +275,7 @@ class HybridFugueEngine:
                 else:
                     # Voice has already entered -> AI generated Counterpoint
                     idx = torch.tensor([self.tokenizer.encode(current_seq)], dtype=torch.long, device=self.device)
+                    target_offset = m * 4.0
                     import time
                     start_time = time.time()
                     invalid_strikes = 0
