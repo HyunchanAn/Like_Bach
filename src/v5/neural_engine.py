@@ -445,6 +445,22 @@ class HybridFugueEngine:
                     if remaining > 4.0: remaining = 4.0
                     current_seq.extend(["[REST]", f"D{round(remaining, 3)}"])
                     
+            if measure_failed:
+                if stream_queue:
+                    stream_queue.put({"type": "retry", "message": f"Rollback Measure {m}"})
+                measure_retries[m] = measure_retries.get(m, 0) + 1
+                if measure_retries[m] > 3:
+                    if m == 4 * subject_measures + 1:
+                        print("Fugue continuation failed entirely")
+                        break
+                    measure_retries[m] = 0
+                    global_rollbacks += 1
+                    if global_rollbacks > 20:
+                        print("Too many global rollbacks in Continuation")
+                        break
+                    m -= 1
+                continue
+                
             if stream_queue:
                 stream_queue.put({"type": "chunk", "notes": self._parse_v5_tokens(current_seq), "debug": debug_data_cont})
                 
@@ -453,6 +469,9 @@ class HybridFugueEngine:
                 if measure not in all_debug_logs:
                     all_debug_logs[measure] = []
                 all_debug_logs[measure].extend(logs)
+                
+            measure_retries[m] = 0
+            m += 1
                 
         # Write the final debug document to disk
         try:
