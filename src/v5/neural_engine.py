@@ -307,7 +307,7 @@ class HybridFugueEngine:
                             invalid_strikes += 1
                         else:
                             invalid_strikes = 0
-                            
+                        
                         if token.startswith("[VOICE_") or token.startswith("[BAR_") or token == "[FINAL]" or invalid_strikes >= 5:
                             if invalid_strikes >= 5:
                                 print(f"Measure {m} Voice {v} Max Invalid Strikes Reached!")
@@ -323,18 +323,26 @@ class HybridFugueEngine:
                         idx = torch.cat((idx, idx_next), dim=1)
                         current_seq.append(token)
                         
+                        if token.startswith("D"):
+                            try:
+                                val = float(token[1:])
+                                current_offset += val
+                                if current_offset >= target_offset:
+                                    break
+                            except Exception: pass
+                            
                     # Fallback logic to pad measure if broken early
                     current_notes, voice_offsets = self._parse_v5_tokens_with_offsets(current_seq)
                     current_offset = voice_offsets.get(v, (m-1)*4.0)
                     target_offset = m * 4.0
-                    if measure_failed:
-                        break
-
-                    if target_offset - current_offset > 0.05:
+                    if current_offset < target_offset:
                         remaining = target_offset - current_offset
                         if remaining > 4.0: remaining = 4.0
                         current_seq.extend(["[REST]", f"D{round(remaining, 3)}"])
                         
+                    if measure_failed:
+                        break
+
             if measure_failed:
                 if stream_queue:
                     stream_queue.put({"type": "retry", "message": f"Rollback Measure {m}"})
@@ -420,7 +428,7 @@ class HybridFugueEngine:
                         invalid_strikes += 1
                     else:
                         invalid_strikes = 0
-                        
+                    
                     if token.startswith("[BAR_") or token.startswith("[VOICE_") or token == "[FINAL]" or invalid_strikes >= 5:
                         if invalid_strikes >= 5:
                             print(f"Measure {m} Voice {v} Max Invalid Strikes Reached!")
@@ -436,6 +444,14 @@ class HybridFugueEngine:
                     idx = torch.cat((idx, idx_next), dim=1)
                     current_seq.append(token)
                     
+                    if token.startswith("D"):
+                        try:
+                            val = float(token[1:])
+                            current_offset += val
+                            if current_offset >= target_offset:
+                                break
+                        except Exception: pass
+                        
                 # Fallback logic to pad measure if broken early
                 current_notes, voice_offsets = self._parse_v5_tokens_with_offsets(current_seq)
                 current_offset = voice_offsets.get(v, (m-1)*4.0)
