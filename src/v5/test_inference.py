@@ -39,12 +39,21 @@ class FugueEngineV5:
         generated_tokens = self.decode(generated_idx[0].tolist())
         return generated_tokens
 
+from src.v5.neural_engine import HybridFugueEngine
+
 if __name__ == "__main__":
-    engine = FugueEngineV5('data/processed/v5/fugue_model_v5.pt', 'data/processed/v5/fugue_vocab_v5.pkl')
+    engine = HybridFugueEngine()
     
-    # 테마 시작 토큰 주입 (마디 1, 성부 1, 주제 시작)
-    prompt = ["[BAR_1]", "[VOICE_1]", "[SUBJECT_START]", "P60", "D1.0", "P62", "D1.0"]
+    # 테마(주제) 정의
+    subject = [
+        {"pitch": 60, "duration": 1.0, "offset": 0.0, "voice": 1},
+        {"pitch": 62, "duration": 1.0, "offset": 1.0, "voice": 1},
+        {"pitch": 64, "duration": 1.0, "offset": 2.0, "voice": 1},
+        {"pitch": 65, "duration": 1.0, "offset": 3.0, "voice": 1}
+    ]
     
-    output = engine.test_generate(prompt, max_new_tokens=50, temperature=0.8)
-    print("=== Generated Output ===")
-    print(" ".join(output))
+    print("Testing generate_fugue (Target 4 measures)...")
+    # 온도값을 낮게 줘서 고의로 제약 조건 충돌을 일으키기 쉽게 만듦 (옵션)
+    output = engine.generate_fugue(subject_notes=subject, target_measures=4, temperature=0.01)
+    print("=== Generated Output (MIDI Base64) ===")
+    print(len(output), "notes generated.")

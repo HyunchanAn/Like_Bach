@@ -208,9 +208,21 @@ class HybridFugueEngine:
         # 1. Exposition (V1 -> V2 -> V3 -> V4)
         last_pitches = {1: None, 2: None, 3: None, 4: None}
         
-        for m in range(1, 4 * subject_measures + 1):
+        m = 1
+        end_m_exp = 4 * subject_measures
+        measure_states = {}
+        measure_retries = {}
+        
+        while m <= end_m_exp:
+            if measure_retries.get(m, 0) == 0:
+                measure_states[m] = (list(current_seq), dict(last_pitches))
+            else:
+                current_seq = list(measure_states[m][0])
+                last_pitches = dict(measure_states[m][1])
+
             current_seq.append(f"[BAR_{m}]")
-            debug_data_exp = {str(m): [f"=== Measure {m} Exposition ===", "4성부 강제 스케줄링 진행 중"]}
+            debug_data_exp = {str(m): [f"=== Measure {m} Exposition (Retry: {measure_retries.get(m, 0)}) ===", "4성부 강제 스케줄링 진행 중"]}
+            measure_failed = False
             
             for v in range(1, 5):
                 current_seq.append(f"[VOICE_{v}]")
@@ -269,6 +281,7 @@ class HybridFugueEngine:
                     for _ in range(120): # increased from 60 to 120 with timeout guards
                         if time.time() - start_time > 5.0:
                             print(f"Measure {m} Voice {v} Timeout!")
+                            measure_failed = True
                             break
                             
                         logits, _ = self.model(idx[:, -BLOCK_SIZE:])
@@ -297,6 +310,7 @@ class HybridFugueEngine:
                         if token.startswith("[VOICE_") or token.startswith("[BAR_") or token == "[FINAL]" or invalid_strikes >= 5:
                             if invalid_strikes >= 5:
                                 print(f"Measure {m} Voice {v} Max Invalid Strikes Reached!")
+                                measure_failed = True
                             break
                             
                         if token.startswith("P"):
@@ -312,10 +326,25 @@ class HybridFugueEngine:
                     current_notes, voice_offsets = self._parse_v5_tokens_with_offsets(current_seq)
                     current_offset = voice_offsets.get(v, (m-1)*4.0)
                     target_offset = m * 4.0
+                    if measure_failed:
+                        break
+
                     if target_offset - current_offset > 0.05:
                         remaining = target_offset - current_offset
                         if remaining > 4.0: remaining = 4.0
                         current_seq.extend(["[REST]", f"D{round(remaining, 3)}"])
+                        
+            if measure_failed:
+                if stream_queue:
+                    stream_queue.put({"type": "retry", "message": f"Rollback Measure {m}"})
+                measure_retries[m] = measure_retries.get(m, 0) + 1
+                if measure_retries[m] > 3:
+                    if m == 1:
+                        print("Fugue completely failed at measure 1")
+                        break
+                    measure_retries[m] = 0
+                    m -= 1
+                continue
                         
             if stream_queue:
                 stream_queue.put({"type": "chunk", "notes": self._parse_v5_tokens(current_seq), "debug": debug_data_exp})
@@ -325,12 +354,23 @@ class HybridFugueEngine:
                     all_debug_logs[measure] = []
                 all_debug_logs[measure].extend(logs)
                 
+            measure_retries[m] = 0
+            m += 1
+                
         # 2. Continuation (Let AI generate freely, but ENFORCE scaffolding)
-        for m in range(4 * subject_measures + 1, target_measures + 1):
+        end_m_cont = target_measures
+        while m <= end_m_cont:
+            if measure_retries.get(m, 0) == 0:
+                measure_states[m] = (list(current_seq), dict(last_pitches))
+            else:
+                current_seq = list(measure_states[m][0])
+                last_pitches = dict(measure_states[m][1])
+
             if m % 8 == 0:
                 current_seq.append("[EPISODE_MODULATION]")
             current_seq.append(f"[BAR_{m}]")
-            debug_data_cont = {str(m): [f"=== Measure {m} Generation Start ===", "AI 자유 대위법 전개 중..."]}
+            debug_data_cont = {str(m): [f"=== Measure {m} Generation Start (Retry: {measure_retries.get(m, 0)}) ===", "AI 자유 대위법 전개 중..."]}
+            measure_failed = False
             
             for v in range(1, 5):
                 current_seq.append(f"[VOICE_{v}]")
@@ -344,6 +384,7 @@ class HybridFugueEngine:
                 for _ in range(120): # increased from 60 to 120 with timeout guards
                     if time.time() - start_time > 5.0:
                         print(f"Measure {m} Voice {v} Timeout!")
+                        measure_failed = True
                         break
                         
                     logits, _ = self.model(idx[:, -BLOCK_SIZE:])
@@ -377,6 +418,7 @@ class HybridFugueEngine:
                     if token.startswith("[BAR_") or token.startswith("[VOICE_") or token == "[FINAL]" or invalid_strikes >= 5:
                         if invalid_strikes >= 5:
                             print(f"Measure {m} Voice {v} Max Invalid Strikes Reached!")
+                            measure_failed = True
                         break
                         
                     if token.startswith("P"):

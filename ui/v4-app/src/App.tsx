@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import * as Tone from 'tone';
+import { Soundfont } from 'smplr';
 import { NWCKeyboardEngine } from './engine/NWCKeyboardEngine';
 import type { ComposerState, NoteData } from './engine/NWCKeyboardEngine';
 import { ScoreRenderer } from './components/ScoreRenderer';
@@ -41,7 +42,8 @@ const App: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [bpm, setBpm] = useState(120);
   
-  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const [instrument, setInstrument] = useState<'harpsichord' | 'church_organ'>('harpsichord');
+  const sfRef = useRef<any>(null);
   const engineRef = useRef<NWCKeyboardEngine | null>(null);
   const originalSubjectRef = useRef<NoteData[] | null>(null);
 
@@ -121,56 +123,21 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 오디오 엔진 초기화
+  // 오디오 엔진 초기화 (smplr 기반 SoundFont)
   useEffect(() => {
-    synthRef.current = new Tone.Sampler({
-      urls: {
-        A0: "A0.mp3",
-        C1: "C1.mp3",
-        "D#1": "Ds1.mp3",
-        "F#1": "Fs1.mp3",
-        A1: "A1.mp3",
-        C2: "C2.mp3",
-        "D#2": "Ds2.mp3",
-        "F#2": "Fs2.mp3",
-        A2: "A2.mp3",
-        C3: "C3.mp3",
-        "D#3": "Ds3.mp3",
-        "F#3": "Fs3.mp3",
-        A3: "A3.mp3",
-        C4: "C4.mp3",
-        "D#4": "Ds4.mp3",
-        "F#4": "Fs4.mp3",
-        A4: "A4.mp3",
-        C5: "C5.mp3",
-        "D#5": "Ds5.mp3",
-        "F#5": "Fs5.mp3",
-        A5: "A5.mp3",
-        C6: "C6.mp3",
-        "D#6": "Ds6.mp3",
-        "F#6": "Fs6.mp3",
-        A6: "A6.mp3",
-        C7: "C7.mp3",
-        "D#7": "Ds7.mp3",
-        "F#7": "Fs7.mp3",
-        A7: "A7.mp3",
-        C8: "C8.mp3"
-      },
-      release: 1,
-      baseUrl: "https://tonejs.github.io/audio/salamander/"
-    }).toDestination();
-  }, []);
+    const context = Tone.context.rawContext as AudioContext;
+    sfRef.current = new Soundfont(context, { instrument });
+  }, [instrument]);
 
   // 엔진 초기화
   useEffect(() => {
     engineRef.current = new NWCKeyboardEngine((newState, item) => {
       setState(newState);
       // 음표 입력 또는 피치 조정 시 피드백 사운드
-      if (item && synthRef.current) {
+      if (item && sfRef.current) {
         const pitch = typeof item === 'number' ? item : item.pitch;
         if (pitch === -1) return; // Rests don't play sound
-        const freq = Tone.Frequency(pitch, "midi").toFrequency();
-        synthRef.current.triggerAttackRelease(freq, "8n");
+        sfRef.current.start({ note: pitch, duration: 0.5, time: Tone.context.currentTime, velocity: 80 });
       }
     });
 
@@ -393,7 +360,9 @@ const App: React.FC = () => {
       const durationInSec = note.duration * (60 / bpm);
       
       transport.schedule((t) => {
-        synthRef.current?.triggerAttackRelease(freq, durationInSec * 0.85, t);
+        if (sfRef.current) {
+          sfRef.current.start({ note: note.pitch, duration: durationInSec * 0.85, time: t, velocity: 80 });
+        }
       }, timeInSec); 
     });
 
@@ -527,6 +496,18 @@ const App: React.FC = () => {
         </div>
 
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div className="slider-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: 600 }}>Instrument</label>
+            <select 
+              value={instrument} 
+              onChange={(e) => setInstrument(e.target.value as any)}
+              style={{ background: 'var(--bg-main)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px' }}
+            >
+              <option value="harpsichord">Harpsichord</option>
+              <option value="church_organ">Pipe Organ</option>
+            </select>
+          </div>
+
           <div className="slider-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label style={{ fontWeight: 600 }}>Measures</label>
             <input 
