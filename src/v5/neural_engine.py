@@ -212,6 +212,7 @@ class HybridFugueEngine:
         end_m_exp = 4 * subject_measures
         measure_states = {}
         measure_retries = {}
+        global_rollbacks = 0
         
         while m <= end_m_exp:
             if measure_retries.get(m, 0) == 0:
@@ -343,6 +344,10 @@ class HybridFugueEngine:
                         print("Fugue completely failed at measure 1")
                         break
                     measure_retries[m] = 0
+                    global_rollbacks += 1
+                    if global_rollbacks > 20:
+                        print("Too many global rollbacks in Exposition")
+                        break
                     m -= 1
                 continue
                         
@@ -359,6 +364,7 @@ class HybridFugueEngine:
                 
         # 2. Continuation (Let AI generate freely, but ENFORCE scaffolding)
         end_m_cont = target_measures
+        global_rollbacks = 0
         while m <= end_m_cont:
             if measure_retries.get(m, 0) == 0:
                 measure_states[m] = (list(current_seq), dict(last_pitches))
