@@ -760,6 +760,9 @@ class NeuralBachEngine:
 
     @torch.no_grad()
     def generate_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
+        if not subject_notes:
+            self.last_official_evaluation = evaluate_composition_official([], include_jsymbolic=False)
+            return []
         best_notes = None
         best_key = None
         max_attempts = 5
@@ -782,6 +785,9 @@ class NeuralBachEngine:
 
     @torch.no_grad()
     def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
+        if not subject_notes:
+            self.last_official_evaluation = evaluate_composition_official([], include_jsymbolic=False)
+            return []
         best_notes = None
         best_key = None
         max_attempts = 5
