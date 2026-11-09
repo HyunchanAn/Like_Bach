@@ -7,7 +7,8 @@ BLOCK_SIZE = 1024
 N_EMBD = 512
 N_HEAD = 8
 N_LAYER = 8
-DROPOUT = 0.1
+DROPOUT = 0.0625
+
 
 class BachTokenizer:
     def __init__(self, all_sequences=None):
@@ -16,20 +17,21 @@ class BachTokenizer:
             self.vocab.append("[PAD]")
             self.vocab.append("[SOS]")
             self.vocab.append("[EOS]")
-            self.stoi = { s:i for i,s in enumerate(self.vocab) }
-            self.itos = { i:s for i,s in enumerate(self.vocab) }
+            self.stoi = {s: i for i, s in enumerate(self.vocab)}
+            self.itos = {i: s for i, s in enumerate(self.vocab)}
             self.vocab_size = len(self.vocab)
         else:
             self.vocab = []
             self.stoi = {}
             self.itos = {}
             self.vocab_size = 0
-        
+
     def encode(self, s_list):
         return [self.stoi.get(s, self.stoi["[PAD]"]) for s in s_list]
-        
+
     def decode(self, i_list):
         return [self.itos.get(i, "[UNK]") for i in i_list]
+
 
 class Head(nn.Module):
     def __init__(self, head_size):
@@ -37,20 +39,21 @@ class Head(nn.Module):
         self.key = nn.Linear(N_EMBD, head_size, bias=False)
         self.query = nn.Linear(N_EMBD, head_size, bias=False)
         self.value = nn.Linear(N_EMBD, head_size, bias=False)
-        self.register_buffer('tril', torch.tril(torch.ones(BLOCK_SIZE, BLOCK_SIZE)))
+        self.register_buffer("tril", torch.tril(torch.ones(BLOCK_SIZE, BLOCK_SIZE)))
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x)
         q = self.query(x)
-        wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5
-        wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
+        wei = q @ k.transpose(-2, -1) * k.shape[-1] ** -0.5
+        wei = wei.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
         wei = F.softmax(wei, dim=-1)
         wei = self.dropout(wei)
         v = self.value(x)
         out = wei @ v
         return out
+
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads, head_size):
@@ -60,9 +63,23 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(DROPOUT)
 
     def forward(self, x):
-        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        B, T, C = x.shape
+        q = torch.stack([h.query(x) for h in self.heads], dim=1)
+        k = torch.stack([h.key(x) for h in self.heads], dim=1)
+        v = torch.stack([h.value(x) for h in self.heads], dim=1)
+        dropout_p = self.dropout.p if self.training else 0.0
+        out = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=None,
+            dropout_p=dropout_p,
+            is_causal=True,
+        )
+        out = out.transpose(1, 2).contiguous().view(B, T, C)
         out = self.dropout(self.proj(out))
         return out
+
 
 class FeedForward(nn.Module):
     def __init__(self, n_embd):
@@ -77,6 +94,7 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+
 class Block(nn.Module):
     def __init__(self, n_embd, n_head):
         super().__init__()
@@ -90,6 +108,7 @@ class Block(nn.Module):
         x = x + self.sa(self.ln1(x))
         x = x + self.ffwd(self.ln2(x))
         return x
+
 
 class BachTransformer(nn.Module):
     def __init__(self, vocab_size, device="cuda", ignore_index=-1):
@@ -115,8 +134,8 @@ class BachTransformer(nn.Module):
             loss = None
         else:
             B, T, C = logits.shape
-            logits = logits.view(B*T, C)
-            targets = targets.view(B*T)
+            logits = logits.view(B * T, C)
+            targets = targets.view(B * T)
             loss = F.cross_entropy(logits, targets, ignore_index=self.ignore_index)
         return logits, loss
 

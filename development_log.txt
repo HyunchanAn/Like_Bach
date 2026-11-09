@@ -1,10 +1,197 @@
+2026-04-12
+
+- 프로젝트 명칭: Bach-Style Polyphony Generative Engine (BPGE) 초기 기획 및 파이프라인 구축 시작
+  - MacBook Pro M2 Pro (16GB) 환경을 고려하여 MLX 기반의 경량화 전략 채택 및 2성부(Two-part Counterpoint) 생성을 1차 목표로 설정함.
+  - 향후 RTX 5080 환경에서 대규모 모델 확장 가능성을 열어둔 아키텍처를 설계함.
+  - KernScores 및 music21 내장 코퍼스를 데이터 원천으로 결정하고 성부 분리가 명확한 .krn 및 MusicXML 포맷을 채택함.
+  - README.md 로드맵 작성 및 초기 데이터 로딩 파이프라인(src/data_fetcher.py)을 구현함.
+- 주성부 입력 방식 및 백엔드 아키텍처 결정
+  - 선율 직접 입력 컨셉 확정 및 VexFlow 기반 브라우저 악보 생성 인터페이스를 기획함.
+  - FastAPI를 사용하여 Python 분석 엔진(music21)과 UI를 연결하고 CORS 설정을 통해 주제(Subject) 데이터를 JSON 형식으로 전달하도록 구성함.
+
+
+2026-04-13
+
+- Like Bach v2.0 ~ v2.6 고도화 및 실시간 시각화 엔진 완성
+  - 2성부 대위법 사고 엔진(Fugue Engine): 입력된 주제에 대해 리듬적 독립성과 화성적 일관성을 갖춘 대위선율을 실시간 생성함.
+  - Perfect Sync 메커니즘: VexFlow 렌더링 시 음표의 실제 절대 좌표(Absolute X)를 추출하여 Tone.js 재생 타임라인과 1:1 동기화함.
+  - Sticky Playhead & Scrolling Score: 재생 바를 화면 왼쪽 1/3 지점에 고정하고 악보를 가로로 흐르게 하여 가독성을 극대화함.
+  - 좌표 교정 시스템(Zero-Error Calibration): 고해상도 환경에서의 마우스 입력 좌표 오차를 getYForLine 기반 동적 측정으로 해결함.
+  - 음악적 마디(Barline) 자동 복구: 4/4 박자에 맞춘 마디 구분선을 입력 및 출력 악보 전체에 삽입함.
+
+
+2026-04-16
+
+- Like Bach v3.1 - Harmonic Re-education (바흐 화성 재교육)
+  - 데이터셋 확장: music21.corpus 기반 바흐 성악곡(코랄, 인벤션, WTC) 363곡 수집 및 12,300개 시퀀스를 확보함.
+  - 시간 교차형(Time-Interleaved) 포맷: 수직적 화성 관계 학습을 위해 모든 성부 음표를 시간순으로 인터리빙([TIME] [V1] [V2] 구조)함.
+  - 조성 기반 학습: 시퀀스 시작부에 [KEY_X] 토큰을 삽입하여 조성 내 화성 기능을 학습하도록 유도함.
+  - Resume 기능: src/train.py에 체크포인트 로드 및 ignore_index 패딩 마스크 수정을 반영함.
+- Like Bach v4.0 - Master Bach Era (4성부 완전체로의 전환)
+  - 4성부 인터리빙(S, A, T, B) 마스터 포맷: 4성부 전체의 화성적 상관관계를 동시에 학습하도록 개편함.
+  - VRAM-Direct & Vectorized Indexing: 파이썬 루프를 제거하고 GPU 메모리에 데이터를 상주시키는 초고속 학습 엔진을 구축함.
+  - Time Quantization: 0.125(32분음표) 단위 정률화를 통해 데이터 노이즈를 차단하고 CosineAnnealingLR 스케줄러로 최종 0.068 Loss를 달성함.
+  - 레거시 보존: 기존 2성부 결과물을 src/v3/에 격리하고 새로운 4성부 학습 파이프라인을 src/v4/에 분리함.
+
+
+2026-04-17
+
+- Like Bach v4.0 - UI/UX 고도화 (NWC2 Premium Studio)
+  - NWC2 기반 단축키 시스템 이식: 숫자키(1~6) 음표 길이 선택, 방향키 음정 이동, 엔터 음표 입력, Backspace 삭제 등 키보드 중심 워크플로우를 구현함.
+  - 자동 마디 구분(Auto Barline) 로직: 음표 입력 시 실시간으로 박자 합을 계산하여 4/4박자 기준(합 4.0)마다 자동으로 마디 구분선을 삽입함.
+  - 테마 기반(Theme-Aware) 시각화 엔진: 라이트/다크 모드 색상 대응 및 Vite + React + TypeScript 기반 프론트엔드 스택 전면 교체를 완료함.
+
+
+2026-04-18
+
+- Like Bach v4.5 - Refinement & Awareness (알고리즘 고도화)
+  - DeepBach(2017)의 Gibbs Sampling 양방향 문맥 활용 및 BachBot(2016)의 기능 화성(Functional Harmony) 직렬화 전략을 벤치마킹함.
+  - music21.roman을 활용하여 각 시점의 화성을 [ROMAN_I], [ROMAN_V7] 등으로 추출하고 마디 카운트다운([REMAIN_N]), 박자표([TS_X]), 종지([FINAL]) 토큰을 도입함.
+  - 총 343곡의 코랄 코퍼스를 바탕으로 4,116개의 고도화 시퀀스(bach_tokens_advanced.pkl)를 생성하고 RTX 5080 환경에서 학습을 개시함.
+
+
+2026-04-19
+
+- Like Bach v4.5 - 전략적 학습 종료 및 엔진 가동
+  - Step 5100, Loss 0.0723 지점에서 학습을 완료하고 [ROMAN_] 및 [REMAIN_] 토큰 도입을 통한 수렴 속도 단축을 확인함.
+  - neural_engine.py에서 Project Root 경로 수정, 모델 로드 및 Gibbs Sampling 기반 4성부 구성 테스트를 완료함.
+
+
+2026-05-11
+
+- Like Bach Studio v4.6.0 배포
+  - 가독성 극대화를 위한 대형 폰트 및 그리드 레이아웃을 적용하고 ScoreRenderer 내 4/4 박자 강제 교정 및 쉼표 자동 패딩 시스템을 구축함.
+  - NeuralBachEngine 0.5 오프셋 정밀 생성 및 24마디 완주 로직을 구현하고 성부별 기둥 방향(S/T Up, A/B Down)을 고정함.
+
+
+2026-05-18
+
+- Like Bach CI 파이프라인 및 경량 단위 테스트 도입
+  - GitHub Actions 기반 지속적 통합(.github/workflows/ci.yml) 및 tests/test_backend.py 경량 단위 테스트 세트를 수립함.
+  - eslint.config.js, tsconfig.app.json, package.json 빌드 스크립트 수정으로 프론트엔드 프로덕션 빌드 무결성을 확보함.
+  - ruff.toml 및 pyproject.toml 구성을 통해 정적 분석 및 패키지 구조화를 완료함.
+
+
+2026-05-22
+
+- Like Bach Studio v4.6 핫픽스 및 모델 재학습
+  - neural_engine.py에서 입력된 주제(Soprano)의 실제 오프셋과 리듬을 바탕으로 생성 루프를 실행하도록 수정하여 음표 겹침 문제를 해결함.
+  - ScoreRenderer.tsx에서 고유 SVG ID를 부여하고 Tone.js 스케줄러와 연동하여 가로 횡스크롤 및 실시간 음표 하이라이팅을 구현함.
+  - VexFlow의 .setStemDirection() 메서드를 명시적으로 호출하여 4성부 기둥 방향을 고정함.
+  - 전처리 코드에서 flatten()을 통한 Global Offset 추출로 수정한 뒤 10,000 Step 재학습(Loss 0.0876)을 완료함.
+
+
+2026-05-23
+
+- 4성부 유니즌 생성 방지 및 다크 모드 쉼표 시인성 개선
+  - 동일 시각(Offset)에 서로 다른 성부가 동일한 음높이(Pitch)를 소리 내지 않도록 active_pitches 기반 로짓 마스킹(-1e9) 로직을 적용함.
+  - ScoreRenderer.tsx에서 자동 패딩 쉼표 색상을 다크/라이트 모드 조건부 스타일로 개선함.
+- 침묵 구간(Silence Gap) 방지, 화성 평가 루프 및 온음표 생성 제어
+  - _fix_silence_gaps 및 ScoreRenderer 마디 경계 음표 분할 로직을 구현함.
+  - _evaluate_harmony 함수를 통해 수직 음정 관계를 평가하고 임계치 90.0점 기준 조건부 재작곡 루프를 통합함.
+  - 종지부 도달 전 중간 마디에서 AI가 무작위로 온음표(duration 4.0)를 샘플링하지 않도록 마스킹 처리를 적용하고, [FINAL] 토큰 종료 조건을 curr_measure >= target_measures로 보정함.
+- 오디오 재생 및 VexFlow 오선지 좌표/수직 정렬 교정
+  - Tone.js 재생 시 박자 단위를 BPM 기준 초 단위로 변환한 뒤 0.85를 곱하여 동음 연타 시 아티큘레이션이 유지되도록 수정함.
+  - VexFlow Stave의 getLineForY(y) 함수를 직접 호출하여 마우스 클릭 피치 매핑 오차를 제거하고 호버 툴팁을 추가함.
+  - joinVoices([Soprano, Alto])와 joinVoices([Tenor, Bass])로 오선지별 그룹화 포매팅을 적용하여 수직 정렬과 가로 엇갈림(Collision Shift) 문제를 동시에 해결함.
+  - 구형 규칙 기반 FugueEngine을 정리하고 차세대 하이브리드 푸가 아키텍처 기획을 수립함.
+
+
+2026-05-24
+
+- Phase 2/3 Fugue Engine (Dual-Engine Architecture) 및 실시간 스트리밍(SSE) 구축
+  - 바흐 인벤션, 평균율(WTC) 및 다성음악 코퍼스를 수집하고 [SUBJECT], [ANSWER], [EPISODE] 구조 토큰 전처리 및 학습 파이프라인을 구축함.
+  - Rule-based Exposition(5도/옥타브 하행 모방 스케줄링)과 트랜스포머 자유 대위 생성을 결합한 하이브리드 푸가 생성 루프를 구현함.
+  - api.py에 비동기 큐와 스레딩을 활용한 /api/stream_fugue SSE 엔드포인트를 신설하고 App.tsx에서 실시간 렌더링 및 MIDI 다운로드 기능을 연동함.
+  - 마디를 초과하는 음표를 마디 경계 기준으로 분할(Split)하여 타건 및 렌더링 오류를 해결함.
+
+
+2026-05-25
+
+- 무한 루프 버그 픽스 및 4성부 푸가 제시부(Exposition) 구조 복원
+  - [TIME_] 토큰 생성 시 내부 시계(current_offset)가 실시간 갱신되도록 수정하여 무한 생성 루프를 해결함.
+  - ScoreRenderer.tsx 내 SVG 엘리먼트에 totalDynamicWidth를 주입하여 40마디 악보 겹침 현상을 해소함.
+  - Soprano(0박) -> Alto(+N박, 5도 하강 응답) -> Tenor(+2N박, 옥타브 하강 주제) -> Bass(+3N박, 12도 하강 응답)의 4성부 제시부 스케줄링을 완성하고 이후 [EPISODE]로 진입하도록 개편함.
+
+
+2026-05-26
+
+- V5 Hybrid Engine 토큰 파싱 및 성부 오프셋 버그 수정
+  - _parse_v5_tokens에서 tokens.index() 대신 enumerate()를 적용하여 [REST] 토큰 파싱 시 voice_offsets가 정상 증가하도록 수정함.
+  - 4성부 제시부에서 각 성부가 순차 진입하며 대주제를 병행 생성하도록 스케줄링 로직을 보완함.
+
+
+2026-05-28
+
+- Like Bach v5.0 하이브리드 엔진 최적화 및 음악이론 규칙 개편
+  - 디스크 임시 파일(temp_input.mid, temp_output.mid) 대신 io.BytesIO 메모리 스트리밍 방식으로 개편함.
+  - preprocess_fugue.py에 ProcessPoolExecutor 멀티코어 병렬 처리를 도입함.
+  - 주제의 앞부분 도약 맥락을 분석하는 Tonal Answer 알고리즘 및 성부별 Tessitura Center 기반 동적 옥타브 보정을 구현함.
+  - Logits 마스킹 필터링(filter_logits)으로 음역대 이탈 및 1옥타브 초과 도약을 차단하고 데드락 방지 Safe-select 로직을 적용함.
+
+
+2026-06-01
+
+- V5 113M Pro 모델 아키텍처 복구, 실시간 성부 오프셋 동기화 및 백엔드 자동 기동 개선
+  - Rotary Position Embedding(RoPE) 및 다중 속성(token, pitch_class, octave, voice) 합산 임베딩을 갖춘 UnifiedTransformerV5 구조를 정비함.
+  - _parse_v5_tokens_with_offsets 메서드를 통해 매 스텝 실시간으로 current_offset을 동기화하고 연속 쉼표 및 성부 교차(Voice Crossing)를 차단함.
+  - 피치 후보군 고갈 시 쉼표 도배를 막는 세이프가드 및 추론 완료 시점의 VRAM 캐시 해제(gc.collect, torch.cuda.empty_cache)를 적용함.
+  - src/v4/neural_engine.py 내 _inject_roman_token의 미정의 변수 참조(NameError) 블록을 제거하여 코랄 생성 파이프라인을 복구함.
+  - vite.config.ts의 백엔드 기동 로직을 child_process.spawn(detached, unref) 기반으로 개편하고 App.tsx에 실시간 백엔드 상태 표시 및 푸가 최소 마디 안내 UI를 추가함.
+
+
+2026-06-02
+
+- README.md 아키텍처 다이어그램(Mermaid) 및 배지 정리
+  - 시스템 아키텍처 Mermaid 다이어그램을 추가하고 특수문자 따옴표 문법 오류를 수정함.
+
+
+2026-06-06
+
+- V5 Hybrid Fugue Engine 스코프 오류 수정 및 백엔드/템포 UI 개선
+  - generate_fugue 내부의 중복 import torch 구문을 제거하여 UnboundLocalError를 해결함.
+  - vite.config.ts에 /api-stop-backend 미들웨어를 추가하여 프론트엔드 CPU 상태 버튼에서 백엔드 On/Off 토글을 지원함.
+  - App.tsx 하단 상태바에 40~240 BPM 조절 입력 폼을 추가하고 Tone.js 재생 스케줄러와 연동함.
+
+
+2026-06-07
+
+- 모델 스케일 분기 처리 및 V4 -> V5 API 아키텍처 일원화 (Issue #20, #22)
+  - src/v5/neural_engine.py에서 모델 로드 시 스케일 옵션 및 MockTokenizer 매핑을 보완하고 32분음표 제약을 추가함.
+  - NeuralBachEngine을 src/v5/neural_engine.py로 병합하고 src/v4/api.py를 src/v5/api.py로 일원화함.
+  - src/v5/neural_engine.py 내 Ruff 린팅 오류(E722, F541)를 수정하고 GitHub Actions CI 통과를 확인함.
+
+
+2026-07-12
+
+- 개발일지 인코딩 복구 및 가중치 누락 예외 처리 점검
+  - 파일 내 CP949 인코딩 깨짐 현상을 UTF-8로 복구하고 가중치 파일 부재 시 폴백 동작을 점검함.
+
+
 2026-07-14
 
-- SDAD v3.2.0 프로토콜에 의거하여 Packet-003 작업을 수행함.
-- 백엔드 추론 엔진(src/v5/neural_engine.py) 내 Exposition 및 Continuation 루프의 상태 오염(Mutation) 버그를 분석하고 수정함.
-- Exposition에서 롤백 발생 시 current_seq 변수가 리스트 복사본이 아닌 참조값을 사용하여 이전 시도의 결과가 누적되는 문제를 발견하고, measure_states 저장 방식 및 복원 방식을 깊은 복사에 준하는 list(), dict() 형태로 수정하여 해결함.
-- Exposition 단계의 AI 생성 루프(for _ in range(120)) 내에 D 토큰 생성 시 current_offset을 target_offset과 비교하여 루프를 조기 탈출(break)하는 로직이 누락되어 있던 것을 발견하고 복구함.
-- [PAD] 등 유효하지 않은 토큰 선택 시 invalid_strikes가 제대로 누적되지 않고 초기화되어 루프가 무한히 겉도는 현상을 방지함.
-- test_fugue.py를 활용한 E2E 단위 테스트 결과, 성부 스케줄링 오프셋 및 음정 데이터가 예상치와 정확히 일치함(68.0 == 8.0 에러 해결)을 확인.
-- 수정 사항을 리포지토리에 반영(Commit & Push)한 후 GitHub CLI(gh run list)를 통해 원격 CI/CD 파이프라인 Ruff 체크 및 Pytest 테스트 100% 통과(completed success)를 확인함.
-- 해당 작업을 통해 버그 픽스와 품질 검증을 마무리하였으며, 테스트 항목을 우회하거나 타임아웃을 강제로 늘리는 등의 편법을 사용하지 않고 논리적 결함을 완전히 해결함.
+- 백엔드 추론 엔진(src/v5/neural_engine.py) 상태 오염(Mutation) 및 루프 탈출 버그 수정
+  - Exposition에서 롤백 발생 시 current_seq 변수가 참조값을 사용하여 이전 시도 결과가 누적되는 문제를 발견하고, measure_states 저장 및 복원 방식을 깊은 복사에 준하는 list(), dict() 형태로 수정하여 해결함.
+  - Exposition 단계의 AI 생성 루프(for _ in range(120)) 내에 D 토큰 생성 시 current_offset을 target_offset과 비교하여 루프를 조기 탈출(break)하는 로직을 복구함.
+  - [PAD] 등 유효하지 않은 토큰 선택 시 invalid_strikes가 누적되도록 수정하여 무한 루프를 방지함.
+  - test_fugue.py E2E 단위 테스트 및 원격 GitHub Actions CI/CD 파이프라인(Ruff, Pytest) 100% 통과를 확인함.
+
+
+2026-11-09
+
+- 저장소 클론, NoteWorthy Composer 2 (NWC 2.75) 부가기능(User Tool) 구축 및 SG 표준 문서 체계 전환 (메인 워크스테이션)
+  - C:\Users\sg\Documents\Github\Like_Bach 경로에 저장소를 클론하고 feature/nwc-user-tool 브랜치를 생성함.
+  - src/nwc/nwctxt_bridge.py를 통해 NWC2의 FileText(!NoteWorthyComposer) 및 ClipText(!NoteWorthyComposerClip) 양방향 파서와 4성부(Soprano, Alto, Tenor, Bass) 총보 생성기를 구축함.
+  - 높은음자리표(Treble), 낮은음자리표(Bass), 가온음자리표(Alto), 테너음자리표(Tenor)의 오선 좌표(Pos)와 MIDI 피치 간 양방향 변환, 조표 및 마디 내 임시표(#, b, n, x, v) 추적, 마디 경계 붙임줄(^) 분할, 8분/16분음표 꼬리 묶기(Beam) 자동화 로직을 적용함.
+  - src/nwc/nwc_user_tool.py에서 FastAPI 백엔드 연동, 로컬 PyTorch 트랜스포머 추론, 바로크 4성부 코랄 화성 및 푸가 대위법 생성 파이프라인을 통합하고 표준 입출력(STDIN/STDOUT) 규격을 준수하도록 구성함.
+  - scripts/install_nwc_tool.py를 실행하여 로컬 NWC2 설정(nwc2UserTools.ini 및 레지스트리 HKCU Options)에 4종의 User Tool(4-Voice Chorale, 4-Voice Fugue, Custom Generator Prompt, Harmonize Selected Clip)을 등록 완료함.
+  - tests/test_nwc_tool.py 단위 및 통합 테스트(8개 항목 전체 통과), Ruff 정적 분석 검사 통과, NWC2 공식 변환기(nwc-conv.exe)를 통한 출력 악보 유효성 검증을 완료함.
+  - 구버전 SDAD 프로토콜 잔재(GEMINI.md, sdad-state.yaml, review-findings.md, docs/, SPEC/)를 전수 제거하고, 맥북 SG 시리즈 표준 4대 문서 디렉토리(plans_replies_walkthrough, plans_replies_walkthrough_archive, reports, reports_archive) 체제로 전환함.
+  - 과거 커밋(f51361e)에서 덮어쓰여 유실되었던 2026-04-12 ~ 2026-07-12 개발일지 히스토리를 복원하고 단일 파일 규격(YYYY-MM-DD 헤더 및 하이픈 불릿)으로 통합 정돈함.
+- 코랄(V4) 및 푸가(V5) 어텐션 VRAM 누수 패치, 가중치 복원 재학습 및 Hugging Face Hub(chemahc94/like-bach-models) 동기화 완료 (메인 워크스테이션)
+  - src/v5/models.py 내 Head.__init__에 잔존하던 미사용 tril 버퍼 192개(12.9GB VRAM 누수 원인)를 제거하고, MultiHeadAttention.forward를 4차원 텐서(B, n_head, T, head_size) 기반 cuDNN SDPA(dropout=0.0625, bfloat16) 연산으로 개편하여 스텝당 연산 속도를 10,679ms에서 292.7ms로 36.5배 가속함.
+  - src/v4/models.py 역시 4차원 배치 scaled_dot_product_attention 구조로 개편하고 src/v4/train.py 및 src/v5/train_fugue.py에 bfloat16 혼합 정밀도 학습을 적용함.
+  - 푸가 V5 모델(data/processed/v5/fugue_model_v5.pt, 10 Epochs, Train Loss 0.8310 / Val Loss 0.8761) 및 코랄 V4 모델(data/processed/v4/bach_model.pt, 3,000 Steps, Loss 0.4585) 재학습을 완료함.
+  - 두 모델을 .safetensors 및 동적 시퀀스 축(dynamic_axes) 기반 .onnx 포맷으로 익스포트하고 ONNX Runtime 수치 정합성(PyTorch 대비 최대 절대 오차 V4 2.10e-5, V5 8.58e-6)을 검증함.
+  - Hugging Face Hub(chemahc94/like-bach-models) 저장소를 생성하고 v4/ 및 v5/ 하위에 .pt, .safetensors, .onnx, .pkl 아티팩트 8종과 SHA-256 매니페스트(release_manifest.json)를 업로드 완료함.
+  - src/v5/neural_engine.py 내 HybridFugueEngine 및 NeuralBachEngine 초기화 시 로컬 가중치 부재 시 Hugging Face Hub(chemahc94/like-bach-models)에서 자동으로 다운로드(hf_hub_download)하여 복구하는 폴백 로더 및 safetensors 우선 로더를 연동하고, .gitignore에 .safetensors 및 .onnx 제외 규칙을 추가함.

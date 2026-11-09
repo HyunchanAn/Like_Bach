@@ -3,27 +3,24 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 .env
 
-# Data
-data/raw/
-data/processed/**/*.pt
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-.env
-
-# Data
+# Data & Model Weights (tracked on Hugging Face Hub: chemahc94/like-bach-models)
 data/raw/
 data/processed/**/*.pt
 data/processed/**/*.pkl
+data/processed/**/*.safetensors
+data/processed/**/*.onnx
 
-# Tools
+# Tools & Temp
 .vscode/
 .idea/
 scratch/
-# Models
+debug_logs/
+
+# Legacy Models
 models/**/*.pt
 models/**/*.pkl
+models/**/*.safetensors
+models/**/*.onnx

@@ -1,0 +1,37 @@
+{
+  "repo_id": "chemahc94/like-bach-models",
+  "artifacts": {
+    "v4/bach_model.pt": {
+      "sha256": "95c49b033d4519d673006c3c4cf180821c602cd7805d8de0cf33af443a937fdd",
+      "size_bytes": 389345895
+    },
+    "v4/bach_model.safetensors": {
+      "sha256": "03fcefa738a12e4aa1bb4ba9f88c9af7fde114f461e8d313cbfc0137d09c1055",
+      "size_bytes": 389249464
+    },
+    "v4/bach_model.onnx": {
+      "sha256": "9a62f3c68cd1798a2f15fe0dea6d589b80ba2a746000092716ebe5569acebec2",
+      "size_bytes": 120957635
+    },
+    "v4/tokenizer.pkl": {
+      "sha256": "8e5f39c02ee3c672359012625c7149c790710f5dd69a3cea736ecf01ffb60887",
+      "size_bytes": 140217
+    },
+    "v5/fugue_model_v5.pt": {
+      "sha256": "dc4403109bf06bf29bc6f92c74475df2d0066fe9047bbcb12f4de1447e9196bd",
+      "size_bytes": 457208896
+    },
+    "v5/fugue_model_v5.safetensors": {
+      "sha256": "27a725481284b1509d1a087e43d04c908be2898e33deee800224c8e4f98b76f2",
+      "size_bytes": 456983764
+    },
+    "v5/fugue_model_v5.onnx": {
+      "sha256": "2059e8c9bc865a5b55dbdd7eb62d8dd86ee5f0c57802de0b4db8256316a5d33d",
+      "size_bytes": 457525483
+    },
+    "v5/fugue_vocab_v5.pkl": {
+      "sha256": "467d84144b1957b10bf8d0c9a3eb018ca3c14e1c8addcea52594e90d8d381862",
+      "size_bytes": 3179
+    }
+  }
+}

@@ -13,6 +13,36 @@ import sys
 sys.modules["models"] = models
 sys.modules["src.models"] = models
 
+HF_REPO_ID = os.environ.get("LIKE_BACH_HF_REPO", "chemahc94/like-bach-models")
+
+
+def _ensure_hf_artifact(local_path: str, hf_filename: str) -> str:
+    if os.path.exists(local_path):
+        return local_path
+    try:
+        import shutil
+        from huggingface_hub import hf_hub_download
+
+        cached = hf_hub_download(repo_id=HF_REPO_ID, filename=hf_filename)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        shutil.copy2(cached, local_path)
+        print(f"Downloaded {hf_filename} from Hugging Face ({HF_REPO_ID}) -> {local_path}")
+    except Exception as e:
+        print(f"Warning: Hugging Face auto-download skipped for {hf_filename}: {e}")
+    return local_path
+
+
+def _load_weights_dict(model_path: str, device: str):
+    st_path = os.path.splitext(model_path)[0] + ".safetensors"
+    if os.path.exists(st_path):
+        try:
+            from safetensors.torch import load_file
+
+            return load_file(st_path, device=device)
+        except Exception:
+            pass
+    return torch.load(model_path, map_location=device, weights_only=True)
+
 
 class HybridFugueEngine:
     def __init__(self, model_path='data/processed/v5/fugue_model_v5.pt', tokenizer_path='data/processed/v5/fugue_vocab_v5.pkl'):
@@ -28,6 +58,9 @@ class HybridFugueEngine:
         print(f"Initializing HybridFugueEngine with scale={scale} based on path {model_path}")
         from src.v5.models import BachTransformerConfig
         config = BachTransformerConfig(model_scale=scale, is_causal=True)
+
+        _ensure_hf_artifact(tokenizer_path, "v5/fugue_vocab_v5.pkl")
+        _ensure_hf_artifact(model_path, "v5/fugue_model_v5.pt")
         
         try:
             with open(tokenizer_path, 'rb') as f:
@@ -45,7 +78,7 @@ class HybridFugueEngine:
             
         self.model = UnifiedTransformerV5(self.tokenizer.vocab_size, device=self.device, config=config).to(self.device)
         try:
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+            self.model.load_state_dict(_load_weights_dict(model_path, self.device))
             print(f"Successfully loaded V5 weights from {model_path}")
         except Exception as e:
             print(f"Warning: Could not load V5 weights: {e}")
@@ -573,6 +606,8 @@ class NeuralBachEngine:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         token_path = tokenizer_path if os.path.exists(tokenizer_path) else 'data/processed/v4/tokenizer.pkl'
+        _ensure_hf_artifact(token_path, "v4/tokenizer.pkl")
+        _ensure_hf_artifact(model_path, "v4/bach_model.pt")
         fugue_token_path = 'models/v4/fugue_vocab.pkl'
         
         if os.path.exists(token_path):
@@ -592,7 +627,7 @@ class NeuralBachEngine:
         
         if os.path.exists(model_path):
             try:
-                self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+                self.model.load_state_dict(_load_weights_dict(model_path, self.device))
                 self.model.eval()
             except Exception: pass
             

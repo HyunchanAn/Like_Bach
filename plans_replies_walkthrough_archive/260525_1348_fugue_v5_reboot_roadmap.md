@@ -22,14 +22,14 @@
 
 ### 1.1 핵심 데이터 소스 라인업
 
-- **스탠포드 대학 CCARH (KernScores):** Humdrum `kern` 포맷 데이터 활용. 마디, 성부, 전조 분석 기호가 텍스트 기반으로 완벽히 인코딩되어 있어 Transformer 토큰 변환에 가장 이상적입니다.
-- **JSB Fugues (music21 내장):** 바흐 WTC 및 '푸가의 기법' 추출. 각 성부(Soprano, Alto, Tenor, Bass)가 고유의 `Part` 객체로 분리되어 있어 전처리 파이프라인 연동이 용이합니다.
-- **Kunstderfuge (바흐 아카이브):** 성부별 트랙/채널이 완벽히 분리된 MIDI 데이터를 수집한 후, `music21`을 거쳐 조표 및 계표(Tie) 유실을 복원하는 전처리 적용.
+- 스탠포드 대학 CCARH (KernScores): Humdrum `kern` 포맷 데이터 활용. 마디, 성부, 전조 분석 기호가 텍스트 기반으로 완벽히 인코딩되어 있어 Transformer 토큰 변환에 가장 이상적입니다.
+- JSB Fugues (music21 내장): 바흐 WTC 및 '푸가의 기법' 추출. 각 성부(Soprano, Alto, Tenor, Bass)가 고유의 `Part` 객체로 분리되어 있어 전처리 파이프라인 연동이 용이합니다.
+- Kunstderfuge (바흐 아카이브): 성부별 트랙/채널이 완벽히 분리된 MIDI 데이터를 수집한 후, `music21`을 거쳐 조표 및 계표(Tie) 유실을 복원하는 전처리 적용.
 
 ### 1.2 데이터 증강(Augmentation) 스크립트 설계
 
-- **조성 이조 (Key Transposition):** 수집된 모든 곡을 12개 조성으로 자동 이조하여 데이터 볼륨을 12배로 확장합니다.
-- **음역대 제한 기반 성부 교환 (Voice Permutation):** 전위 대위법(Invertible Counterpoint)을 적용하여 성부 간 선율을 맞바꾸되, 각 성부 고유의 음역대(Tessitura, 예: Soprano C4-G5)를 이탈하는 음표가 발생할 경우 해당 증강 데이터는 자동 드롭(Drop) 처리하는 필터링 로직을 구축합니다.
+- 조성 이조 (Key Transposition): 수집된 모든 곡을 12개 조성으로 자동 이조하여 데이터 볼륨을 12배로 확장합니다.
+- 음역대 제한 기반 성부 교환 (Voice Permutation): 전위 대위법(Invertible Counterpoint)을 적용하여 성부 간 선율을 맞바꾸되, 각 성부 고유의 음역대(Tessitura, 예: Soprano C4-G5)를 이탈하는 음표가 발생할 경우 해당 증강 데이터는 자동 드롭(Drop) 처리하는 필터링 로직을 구축합니다.
 
 ---
 
@@ -41,12 +41,12 @@
 
 $$\text{Sequence} = \dots \rightarrow \text{[BAR\_X]} \rightarrow \text{[VOICE\_Y]} \rightarrow \text{[STRUCT\_TAG]} \rightarrow \text{[PITCH]} \rightarrow \text{[DURATION]} \rightarrow \dots$$
 
-- **성부 식별자:** `[VOICE_1]`(Soprano), `[VOICE_2]`(Alto), `[VOICE_3]`(Tenor), `[VOICE_4]`(Bass)
-- **대위 구조 태그:** 패턴 매칭 알고리즘을 통해 데이터 가공 시 주제와 답주 구간에 제어 토큰을 강제 주입합니다. (`[SUBJECT_START]`, `[SUBJECT_END]`, `[ANSWER_START]`, `[ANSWER_END]`)
+- 성부 식별자: `[VOICE_1]`(Soprano), `[VOICE_2]`(Alto), `[VOICE_3]`(Tenor), `[VOICE_4]`(Bass)
+- 대위 구조 태그: 패턴 매칭 알고리즘을 통해 데이터 가공 시 주제와 답주 구간에 제어 토큰을 강제 주입합니다. (`[SUBJECT_START]`, `[SUBJECT_END]`, `[ANSWER_START]`, `[ANSWER_END]`)
 
 ### 2.2 전처리 파일 완전 격리
 
-- 코랄 파이프라인과의 간섭을 차단하기 위해 `src/v4/preprocess.py`를 수정하지 않고, **`src/v5/preprocess_fugue.py` 및 `src/v5/train_fugue.py`로 파일을 완전히 분리**하여 아키텍처 독립성을 확보합니다.
+- 코랄 파이프라인과의 간섭을 차단하기 위해 `src/v4/preprocess.py`를 수정하지 않고, `src/v5/preprocess_fugue.py` 및 `src/v5/train_fugue.py`로 파일을 완전히 분리하여 아키텍처 독립성을 확보합니다.
 
 ---
 
@@ -54,8 +54,8 @@ $$\text{Sequence} = \dots \rightarrow \text{[BAR\_X]} \rightarrow \text{[VOICE\_
 
 ### 3.1 하드웨어 인프라 매핑
 
-- **훈련 환경:** 메인 데스크탑(Ryzen 9 9900X, RTX 5080 16GB)의 병렬 연산 성능을 극한으로 활용하기 위해 배치를 최대화하고 컨텍스트 윈도우 크기를 늘려 장기 대위법적 흐름을 학습시킵니다.
-- **추론 환경:** 병원 컴퓨터(i3-8100, Quadro K420) 등 저사양 환경에서의 구동을 고려하여, 푸가 전용 모델(`fugue_model.pt`)의 파라미터 크기는 코랄과 동일한 **25M 파라미터 수준**으로 경량성을 유지하되, 임베딩 레이어의 토큰 정합성을 튜닝합니다.
+- 훈련 환경: 메인 데스크탑(Ryzen 9 9900X, RTX 5080 16GB)의 병렬 연산 성능을 극한으로 활용하기 위해 배치를 최대화하고 컨텍스트 윈도우 크기를 늘려 장기 대위법적 흐름을 학습시킵니다.
+- 추론 환경: 병원 컴퓨터(i3-8100, Quadro K420) 등 저사양 환경에서의 구동을 고려하여, 푸가 전용 모델(`fugue_model.pt`)의 파라미터 크기는 코랄과 동일한 25M 파라미터 수준으로 경량성을 유지하되, 임베딩 레이어의 토큰 정합성을 튜닝합니다.
 
 ### 3.2 제시부(Exposition) 결정론적 교정
 
@@ -69,7 +69,7 @@ Transformer 단독 생성이 유발하는 음악적 불결함(병행 5/8도)을 
 
 ### 4.1 경량 수치 기반 검증 레이어 (`_evaluate_harmony`)
 
-- `music21` 객체 파싱은 CPU 병목이 극심하므로, 실시간 추론 루프 내에서는 토큰 배열의 음정 간격(Interval) 변화를 수치적으로 연산하는 **NumPy 기반 자체 휴리스틱 함수**를 구현합니다.
+- `music21` 객체 파싱은 CPU 병목이 극심하므로, 실시간 추론 루프 내에서는 토큰 배열의 음정 간격(Interval) 변화를 수치적으로 연산하는 NumPy 기반 자체 휴리스틱 함수를 구현합니다.
 - 두 성부 $V_1, V_2$의 시점 $t$에서의 음정이 다음 조건을 만족하면 병행 진행으로 적발합니다.
     
     $$\Delta I = I(t) - I(t-1) = 0 \quad \text{and} \quad I(t) \in \{5, 8, 12\}$$
@@ -77,8 +77,8 @@ Transformer 단독 생성이 유발하는 음악적 불결함(병행 5/8도)을 
 
 ### 4.2 인페인팅(In-painting) 제한 및 Fail-safe 보호 장치
 
-- **무한 루프 방지:** 오류 적발 시 해당 마디를 마스킹하고 재샘플링하는 루프에 **최대 재시도 횟수(`max_retries=3`)를 강제**합니다.
-- **하드코딩 교정:** 3회 초과 실패 시 백엔드 스레드가 다운되는 것을 막기 위해, 규칙 엔진이 후행 음표의 피치를 협화음정(3도 또는 6도)으로 강제 변환하여 출력을 내보내는 예외 처리 로직을 배치합니다.
+- 무한 루프 방지: 오류 적발 시 해당 마디를 마스킹하고 재샘플링하는 루프에 최대 재시도 횟수(`max_retries=3`)를 강제합니다.
+- 하드코딩 교정: 3회 초과 실패 시 백엔드 스레드가 다운되는 것을 막기 위해, 규칙 엔진이 후행 음표의 피치를 협화음정(3도 또는 6도)으로 강제 변환하여 출력을 내보내는 예외 처리 로직을 배치합니다.
 
 ---
 
@@ -89,7 +89,7 @@ Transformer 단독 생성이 유발하는 음악적 불결함(병행 5/8도)을 
 ### 5.1 마디(Bar) 단위 SSE 스트리밍 (`api.py`)
 
 - 기존 단일 음표 토큰 단위 방출 방식을 폐기합니다.
-- 백엔드 비동기 큐(Queue)는 **한 마디(`[BAR]`)의 모든 성부가 사후 검증을 최종 통과한 시점에만 청크(Chunk) 단위로 패킹**하여 프론트엔드로 SSE(Server-Sent Events)를 방출합니다.
+- 백엔드 비동기 큐(Queue)는 한 마디(`[BAR]`)의 모든 성부가 사후 검증을 최종 통과한 시점에만 청크(Chunk) 단위로 패킹하여 프론트엔드로 SSE(Server-Sent Events)를 방출합니다.
 
 ### 5.2 UI 스튜디오 렌더링 동기화 (`App.tsx`)
 
