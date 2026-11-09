@@ -56,12 +56,31 @@ class HybridFugueEngine:
         elif "large" in model_path:
             scale = "v5_large"
             
+        _ensure_hf_artifact(tokenizer_path, "v5/fugue_vocab_v5.pkl")
+        _ensure_hf_artifact(model_path, "v5/fugue_model_v5.pt")
+
+        state_dict = None
+        if os.path.exists(model_path) or os.path.exists(os.path.splitext(model_path)[0] + ".safetensors"):
+            try:
+                state_dict = _load_weights_dict(model_path, self.device)
+                emb_w = state_dict.get("token_embedding_table.weight")
+                if emb_w is not None:
+                    emb_dim = emb_w.shape[1]
+                    n_blocks = len({k.split(".")[1] for k in state_dict if k.startswith("blocks.")})
+                    if emb_dim == 384:
+                        scale = "small"
+                    elif emb_dim == 768 and n_blocks == 12:
+                        scale = "base"
+                    elif emb_dim == 1024:
+                        scale = "large"
+                    else:
+                        scale = "v5_pro"
+            except Exception as e:
+                print(f"Warning: Could not pre-inspect V5 weights: {e}")
+
         print(f"Initializing HybridFugueEngine with scale={scale} based on path {model_path}")
         from src.v5.models import BachTransformerConfig
         config = BachTransformerConfig(model_scale=scale, is_causal=True)
-
-        _ensure_hf_artifact(tokenizer_path, "v5/fugue_vocab_v5.pkl")
-        _ensure_hf_artifact(model_path, "v5/fugue_model_v5.pt")
         
         try:
             with open(tokenizer_path, 'rb') as f:
@@ -113,10 +132,13 @@ class HybridFugueEngine:
         v_min, v_max = VOICE_RANGES.get(voice, (40, 81))
         
         active_other_voices = []
+        prev_other_voices = {}
         for note in already_generated_notes:
             if note['voice'] != voice:
                 if note['offset'] <= current_offset < note['offset'] + note['duration']:
                     active_other_voices.append((note['voice'], note['pitch']))
+                elif note['offset'] < current_offset:
+                    prev_other_voices[note['voice']] = note['pitch']
                     
         counterpoint_violators = set()
         absolute_violators = set()
@@ -144,6 +166,14 @@ class HybridFugueEngine:
                 if harm_interval in [1, 11, 6]:
                     is_violator = True
                     break
+                if last_pitch is not None and p != last_pitch:
+                    prev_op = prev_other_voices.get(other_v)
+                    if prev_op is not None and prev_op != other_p:
+                        prev_mod = abs(last_pitch - prev_op) % 12
+                        curr_mod = harm_interval % 12
+                        if prev_mod in (0, 7) and curr_mod == prev_mod:
+                            is_violator = True
+                            break
                     
                 if other_v < voice: 
                     if p >= other_p: 

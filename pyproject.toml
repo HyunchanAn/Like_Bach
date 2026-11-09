@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "like-bach-engine"
-version = "4.6.1"
-description = "바흐의 대위법과 트랜스포머 생성 모델이 융합된 하이브리드 음악 생성 엔진"
+version = "5.1.0"
+description = "Baroque counterpoint and fugue generation engine with NWC 2.75 User Tool integration"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -18,19 +18,29 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "fastapi>=0.100.0",
-    "uvicorn>=0.22.0",
-    "pydantic>=2.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "pydantic>=2.6.0",
     "music21>=9.0.0",
-    "torch>=2.0.0",
-    "httpx>=0.24.0",
+    "torch>=2.2.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "safetensors>=0.4.3",
+    "huggingface_hub>=0.23.0",
+    "onnxruntime>=1.18.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+macos-mlx = [
+    "mlx; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-lm; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
 [tool.setuptools]
 packages = ["src", "tests"]
 
 [tool.ruff]
-# Target legacy folders to exclude from style checking
 exclude = [
     "src/v3",
     "src/v4",
@@ -38,8 +48,4 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# E402: Module level import not at top of file (Required for pickle deserialization imports)
-# F401: Unused imports (Required for deserializing classes dynamically)
-# E701: Multiple statements on one line
-# F841: Local variable is assigned to but never used
 ignore = ["E402", "F401", "E701", "F841"]

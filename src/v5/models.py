@@ -271,3 +271,48 @@ class UnifiedTransformerV5(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
+
+
+class BachTokenizerV5:
+    """Fallback tokenizer for V5 fugue engine when vocab pickle is unavailable."""
+
+    def __init__(self):
+        tokens = [
+            "[PAD]",
+            "[UNK]",
+            "[REST]",
+            "[FINAL]",
+            "[SUBJECT]",
+            "[ANSWER]",
+            "[EPISODE]",
+            "[EPISODE_MODULATION]",
+            "[SUBJECT_START]",
+            "[SUBJECT_END]",
+            "[ANSWER_START]",
+            "[ANSWER_END]",
+            "[COUNTERSUBJECT_START]",
+            "[COUNTERSUBJECT_END]",
+            "[TS_4/4]",
+            "[KEY_C]",
+        ]
+        for b in range(1, 65):
+            tokens.append(f"[BAR_{b}]")
+        for v in range(1, 6):
+            tokens.append(f"[VOICE_{v}]")
+        for p in range(36, 85):
+            tokens.append(f"P{p}")
+        for d in (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0):
+            tokens.append(f"D{d}")
+
+        unique_tokens = sorted(set(tokens))
+        self.itos = {i: tok for i, tok in enumerate(unique_tokens)}
+        self.stoi = {tok: i for i, tok in self.itos.items()}
+        self.vocab_size = len(self.itos)
+
+    def encode(self, seq):
+        unk_id = self.stoi.get("[UNK]", 0)
+        return [self.stoi.get(t, unk_id) for t in seq]
+
+    def decode(self, indices):
+        return [self.itos.get(int(i), "[UNK]") for i in indices]
+

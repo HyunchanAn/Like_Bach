@@ -168,3 +168,37 @@
 1. [대위법·화성 규칙 검증기]: 이미 설치된 `music21.figuredBass.checker`(`parallelFifths`, `parallelOctaves`, `hiddenFifth`, `hiddenOctave`, `voiceCrossing`) 및 `music21.figuredBass.possibility`(`voiceOverlap`, `upperPartsWithinLimit`)를 그대로 호출하여 마디당 위배 건수를 측정한다.
 2. [단일 곡 및 코퍼스 특징 통계]: 이미 설치된 `music21.features.jSymbolic`의 72개 공식 추출기(`StepwiseMotionFeature`, `MelodicTritonesFeature`, `AverageNumberOfIndependentVoicesFeature` 등)와 `MusPy`(`muspy.metrics`의 `scale_consistency`, `polyphony_rate`, `pitch_class_entropy`, `groove_consistency`)를 사용한다.
 3. [코퍼스 분포 거리 비교]: `MGEval`의 `Overlapping Area (OA)` / `KLD` 방식 또는 `frechet-music-distance`(`FMD`)를 사용하여 홀드아웃 바흐 테스트 코퍼스와의 분포 거리를 측정한다.
+
+---
+
+# [ 261110 0035 메인 워크스테이션 ] 원곡 단위 분할(Piece-Level Split) V5 재학습 모델 및 V4 코랄 모델 공인 지표 실측 결과
+
+## 1. 원곡 단위 분할 및 소형 프리셋(`small`, 10.85M 파라미터) 재학습 요약 (Issue #27 완료)
+
+- [데이터셋 보강 및 분할]:
+  - 누락되어 있던 평균율 클라비어곡집 2권 1번(`wtc2f01.xml`) 및 3번(`wtc2f03.xml`)을 스탠퍼드 `KernScores`로부터 확보하여 총 48곡(`WTC Book 1 & 2` 전곡)을 완비함.
+  - 12키 전조 및 성부 교환 증강을 수행하기 [이전에] 고정 시드(`seed=42`)로 원곡 파일 단위 분할(`Train: 38곡 / Val: 4곡 / Test: 6곡`, `data/processed/v5/split_manifest.json`)을 수행하여 학습·검증 간 데이터 누수를 원천 차단함.
+- [모델 스케일 및 최적 체크포인트 선별]:
+  - 파라미터 규모: `small` 프리셋(`n_embd=384, n_head=6, n_layer=6`, 총 `10,848,255` 파라미터, 가중치 크기 `45.5 MB`)을 적용하여 기존 `113.8M` 모델 대비 용량을 1/10로 경량화하고 과적합을 억제함.
+  - 학습 곡선(`data/processed/v5/training_log.json`): 총 15 에포크 학습 중 `Epoch 7`에서 검증 손실이 최저점(`Train Loss: 0.9287`, `Val Loss: 0.8976`, `Test Loss: 1.2390`)에 도달한 뒤 `Epoch 8~14` 구간에서 검증 손실이 상승(`0.9148 -> 0.9748`)하는 과적합 변곡점을 포착하여 `Epoch 7` 가중치를 최종 체크포인트로 보존함.
+  - 배포: `.pt`, `.safetensors`, `.onnx`(ONNX Runtime 최대 절대 오차 `4.768e-06`), `.pkl` 및 `release_manifest.json`을 Hugging Face Hub(`chemahc94/like-bach-models`)에 동기화 완료함.
+
+## 2. 바흐 원곡 코퍼스 대비 V4(코랄) 및 V5(푸가) 생성 결과 공인 지표 비교표
+
+`src/v5/evaluator.py`에 구현된 `music21.figuredBass.checker`, `jSymbolic 2.2`, `MusPy` 공식 함수를 통해 바흐 원곡 코퍼스 평균치와 생성 모델 출력을 비교 측정한 결과는 다음과 같다.
+
+| 공인 평가 프레임워크 | 공식 지표명 | 바흐 원곡 코퍼스 실측 참조치 | Chorale V4 생성 결과 | Fugue V5 (`10.85M` Piece-Split) 생성 결과 |
+| :--- | :--- | :---: | :---: | :---: |
+| `music21.figuredBass.checker` | `hidden_fifths` (외성 은복 5도) | `0` | `0` | `0` |
+| `music21.figuredBass.checker` | `hidden_octaves` (외성 은복 8도) | `0 ~ 3` | `0` | `0` |
+| `music21.figuredBass.checker` | `voice_crossings` (성부 교차) | `0 ~ 5` | `0` | `0` |
+| `music21.figuredBass.possibility` | `voice_overlaps` (성부 침범) | `0 ~ 10` | `0` | `0` |
+| `jSymbolic 2.2` | `StepwiseMotionFeature` (순차 진행 비율) | `0.585 ~ 0.693` | `0.6017` (60.2%) | `0.6762` (67.6%) |
+| `jSymbolic 2.2` | `MelodicTritonesFeature` (증4도 도약 비율) | `0.0000 ~ 0.0126` | `0.0169` (1.69%) | `0.0000` (0.00%) |
+| `jSymbolic 2.2` | `MelodicOctavesFeature` (옥타브 도약 비율) | `0.0045 ~ 0.0265` | `0.0000` (0.00%) | `0.0000` (0.00%) |
+| `jSymbolic 2.2` | `AverageNumberOfIndependentVoicesFeature` | 코랄 `~3.8` / 푸가 `~2.5` | `3.8667` | `2.4909` |
+| `MusPy` (`muspy.metrics`) | `scale_consistency` (조성 스케일 일관성) | `0.867 ~ 0.996` (평균 `0.945`) | `0.9180` (91.8%) | `0.9541` (95.4%) |
+| `MusPy` (`muspy.metrics`) | `polyphony_rate` (다성 발음 타임스텝 비율) | 코랄 `1.000` | `0.9688` (96.9%) | `0.6667` (제시부 성부 순차 진입 반영) |
+| `MusPy` (`muspy.metrics`) | `pitch_class_entropy` (피치 클래스 엔트로피) | `2.80 ~ 3.15` | `3.1258` | `2.7697` |
+| `MusPy` (`muspy.metrics`) | `groove_consistency` (마디 간 리듬 일관성) | `0.850 ~ 0.910` (평균 `0.880`) | `0.7679` | `0.8807` |
+

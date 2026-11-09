@@ -212,3 +212,8 @@
   - 기존 웹 프론트엔드(main 브랜치) 관련 개별 이슈(#29 레이아웃, #30 재생, #31 사용성 및 #32·#33의 웹 UI 항목)를 단일 보류 백로그 이슈(#34)로 통합 생성하고 개별 웹 UI 이슈(#29, #30, #31)를 클로즈함.
   - NWC 2.75 User Tool 연동 완료에 따라 이슈 #33을 최종 완료(Closed) 처리함.
   - NWC 부가기능 완성도 제고를 위한 3단계 실행 우선순위를 P0(#28 추론 엔진 폴백 수정 및 requirements.txt 크로스플랫폼 정리) -> P1(#27 이조 전 원곡 단위 데이터 분할, WTC 2권 누락분 보강, 공인 평가 기반 재학습 및 HF 배포) -> P2(#32 구버전 v3 코드 정리, LICENSE/데이터 출처 표기, NWC 중심 README 개편) 순으로 확정함.
+- 이슈 #28, #27, #32 일괄 해결, 원곡 단위 분할 모델(10.85M) 재학습 및 Hugging Face Hub 동기화 완료 (메인 워크스테이션)
+  - [이슈 #28 해결]: src/v5/models.py에 BachTokenizerV5 폴백 클래스를 정의하고, requirements.txt 및 pyproject.toml에서 macOS 전용 mlx 패키지를 플랫폼 조건부(sys_platform == 'darwin')로 분리함. src/v5/api.py를 FastAPI lifespan 방식으로 전환하고 /api/generate 코랄 응답에 midi_base64를 추가함.
+  - [이슈 #27 해결]: 스탠퍼드 KernScores로부터 누락되었던 WTC 2권 1번(wtc2f01.xml) 및 3번(wtc2f03.xml)을 확보하여 48곡 전곡을 완비함. src/v5/preprocess_fugue.py에서 12키 전조 증강 이전에 원곡 단위로 Train(38곡)/Val(4곡)/Test(6곡)를 분할(data/processed/v5/split_manifest.json)하여 데이터 누수를 차단함.
+  - [소형 프리셋 재학습 및 HF 배포]: 10,848,255 파라미터(small 스케일, 45.5MB)로 15 에포크 학습을 수행하여 과적합 변곡점 직전인 Epoch 7 최적 체크포인트(Train Loss 0.9287, Val Loss 0.8976, Test Loss 1.2390)를 선별하고 training_log.json을 기록함. 재학습된 가중치를 .pt, .safetensors, .onnx(ONNX 오차 4.768e-6)로 익스포트하여 Hugging Face Hub(chemahc94/like-bach-models) 및 release_manifest.json에 동기화함.
+  - [이슈 #32 해결]: 미사용 구버전 디렉토리(src/v3) 및 임시 디버그 로그를 제거하고, MIT 라이선스 및 KernScores/music21 출처를 명시한 LICENSE 파일을 생성함. README.md를 NWC 2.75 User Tool 중심으로 전면 개편함.

@@ -18,20 +18,20 @@
       "size_bytes": 140217
     },
     "v5/fugue_model_v5.pt": {
-      "sha256": "dc4403109bf06bf29bc6f92c74475df2d0066fe9047bbcb12f4de1447e9196bd",
-      "size_bytes": 457208896
+      "sha256": "77f9b7bd45a828cb31d0fcb14435d8addf88dbeb286d2fe2a18ce33720354fa3",
+      "size_bytes": 45561192
     },
     "v5/fugue_model_v5.safetensors": {
-      "sha256": "27a725481284b1509d1a087e43d04c908be2898e33deee800224c8e4f98b76f2",
-      "size_bytes": 456983764
+      "sha256": "060ddff202a3dcc0d062fc2b7bd65bd465ffd7bc378eb06297d2fbeff362774d",
+      "size_bytes": 45507732
     },
     "v5/fugue_model_v5.onnx": {
-      "sha256": "2059e8c9bc865a5b55dbdd7eb62d8dd86ee5f0c57802de0b4db8256316a5d33d",
-      "size_bytes": 457525483
+      "sha256": "c07a56a37728b310b6de4081f053411860b6d9a7378a7890307fe5b936822a1a",
+      "size_bytes": 45655698
     },
     "v5/fugue_vocab_v5.pkl": {
-      "sha256": "467d84144b1957b10bf8d0c9a3eb018ca3c14e1c8addcea52594e90d8d381862",
-      "size_bytes": 3179
+      "sha256": "321296ae8d0847f1e6a868e3d8235beae59b90e40876e579ee68df74602a3faf",
+      "size_bytes": 4060
     }
   }
 }
