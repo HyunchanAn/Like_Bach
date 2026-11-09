@@ -204,3 +204,10 @@
   - src/v5/evaluator.py에 MIT music21.figuredBass.checker(parallelFifths, parallelOctaves, hiddenFifth, hiddenOctave, voiceCrossing) 및 possibility(voiceOverlap, upperPartsWithinLimit), McGill jSymbolic 2.2 공식 특징 추출기(StepwiseMotionFeature, MelodicTritonesFeature, AverageNumberOfIndependentVoicesFeature 등), UCSD MusPy 공식 수식(scale_consistency, polyphony, polyphony_rate, pitch_class_entropy, groove_consistency), Georgia Tech MGEval(Gaussian KDE 기반 Overlapping Area 및 KLD)을 통합 구현함.
   - 코랄 및 푸가 생성 시 official_candidate_sort_key를 통해 공식 대위법 위배 건수(병행 5·8도, 성부 교차, 은복 5·8도, 성부 침범) 최소화와 바흐 원곡 코퍼스 참조치 대비 L1 편차 최소화 기준으로 최우수 후보를 선별하도록 연결하고, src/v5/api.py 응답에 official_evaluation 필드를 추가함.
   - tests/test_official_evaluator.py 단위 및 통합 테스트를 작성하여 바흐 원곡(bwv66.6) 검증 및 병행 5·8도 검출 정확도를 확인함.
+
+
+2026-11-10
+
+- GitHub 오픈 이슈(#27 ~ #33) 진척도 동기화 및 우선순위(P0 ~ P3) 라벨·타이틀 배정 (메인 워크스테이션)
+  - 저장소에 P0: Critical, P1: High, P2: Medium, P3: Low 라벨을 생성하고 의존성 및 파급도에 따라 7개 오픈 이슈의 본문 체크리스트와 우선순위를 갱신함.
+  - P0(#28 백엔드 런타임 및 의존성 정리) -> P1(#33 NWC User Tool 웹 UI 입출력 마무리, #27 원곡 단위 데이터 분할 및 공인 평가 기반 재학습) -> P2(#31 프론트엔드 런타임 크래시 수정, #32 타입 에러 및 컴포넌트 분리) -> P3(#29 반응형 레이아웃/아이콘, #30 웹 플레이어 강화) 순으로 로드맵을 확정함.
