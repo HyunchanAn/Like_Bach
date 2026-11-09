@@ -195,3 +195,7 @@
   - 두 모델을 .safetensors 및 동적 시퀀스 축(dynamic_axes) 기반 .onnx 포맷으로 익스포트하고 ONNX Runtime 수치 정합성(PyTorch 대비 최대 절대 오차 V4 2.10e-5, V5 8.58e-6)을 검증함.
   - Hugging Face Hub(chemahc94/like-bach-models) 저장소를 생성하고 v4/ 및 v5/ 하위에 .pt, .safetensors, .onnx, .pkl 아티팩트 8종과 SHA-256 매니페스트(release_manifest.json)를 업로드 완료함.
   - src/v5/neural_engine.py 내 HybridFugueEngine 및 NeuralBachEngine 초기화 시 로컬 가중치 부재 시 Hugging Face Hub(chemahc94/like-bach-models)에서 자동으로 다운로드(hf_hub_download)하여 복구하는 폴백 로더 및 safetensors 우선 로더를 연동하고, .gitignore에 .safetensors 및 .onnx 제외 규칙을 추가함.
+- 모델 가중치 수동 다운로드 유틸리티(download_models.py) 추가, 이슈 #26 종결 및 작곡 품질 정량 평가 방법론 보고서 작성 (메인 워크스테이션)
+  - 프로젝트 루트에 download_models.py를 추가하여 Hugging Face Hub(chemahc94/like-bach-models)로부터 V4/V5 가중치(.pt, .safetensors, .onnx) 및 단어장(.pkl) 8종을 일괄 다운로드하고 release_manifest.json 기준 SHA-256 해시 무결성을 검증하도록 구현함.
+  - 가중치 및 단어장 유실 문제를 다룬 GitHub 이슈 #26에 해결 내역 코멘트를 게시하고 이슈를 닫음(Closed).
+  - 바흐 코랄 및 푸가 자동 작곡 품질 정량 평가 방법론(Tier 1 대위법/화성 문법 감사, Tier 2 Huron 성부 독립성 지표, Tier 3 푸가 제시부·종지 구조 완결성, Tier 4 MGEval 코퍼스 분포 유사도, Tier 5 N-gram 표절·과적합 검증)을 조사하여 reports/261109_2340_symbolic_music_and_counterpoint_quality_evaluation_report.md 보고서로 작성함.
