@@ -48,6 +48,7 @@ def notes_to_midi_base64(notes_list):
 sys.path.append(os.getcwd())
 
 from src.v5.neural_engine import NeuralBachEngine, HybridFugueEngine
+from src.v5.evaluator import evaluate_composition_official
 
 app = FastAPI(title="Like Bach v5 API Engine")
 
@@ -125,9 +126,14 @@ async def generate_bach(request: GenerationRequest):
             refine_iters=request.refine_iters
         )
         
+        official_eval = getattr(engine, "last_official_evaluation", None)
+        if official_eval is None:
+            official_eval = evaluate_composition_official(generated_notes)
+
         return {
             "success": True,
-            "results": generated_notes
+            "results": generated_notes,
+            "official_evaluation": official_eval,
         }
     except Exception as e:
         import traceback
@@ -157,11 +163,13 @@ async def stream_fugue_bach(request: GenerationRequestFugue):
             )
             
             midi_b64 = notes_to_midi_base64(final_notes)
-            
+            official_eval = evaluate_composition_official(final_notes)
+
             stream_q.put({
                 "type": "done",
                 "notes": final_notes,
-                "midi_base64": midi_b64
+                "midi_base64": midi_b64,
+                "official_evaluation": official_eval,
             })
         except Exception as e:
             import traceback

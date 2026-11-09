@@ -6,6 +6,7 @@ import sys
 
 sys.path.append(os.getcwd())
 from src.v5.models import UnifiedTransformerV5, BLOCK_SIZE
+from src.v5.evaluator import evaluate_composition_official, official_candidate_sort_key
 
 from src.v4.models import BachTransformer, BachTokenizer
 import src.v4.models as models
@@ -730,44 +731,47 @@ class NeuralBachEngine:
     @torch.no_grad()
     def generate_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3):
         best_notes = None
-        best_score = -1.0
+        best_key = None
         max_attempts = 5
-        threshold = 90.0  # 화성 점수 문턱값 (정상 악곡은 보통 89~93점 수준)
-        
-        for attempt in range(max_attempts):
+
+        for _attempt in range(max_attempts):
             notes = self._generate_single_response(subject_notes, target_measures, temperature, refine_iters)
-            score = self._evaluate_harmony(notes)
-            
-            if score >= threshold:
-                return notes
-                
-            if score > best_score:
-                best_score = score
+            eval_res = evaluate_composition_official(notes, include_jsymbolic=True)
+            sort_key = official_candidate_sort_key(eval_res)
+
+            if best_key is None or sort_key < best_key:
+                best_key = sort_key
                 best_notes = notes
-                
+                self.last_official_evaluation = eval_res
+
+            # Early accept if 0 span violations, 0 parallel 5ths/8ths, 0 voice crossings, and close to Bach corpus
+            if sort_key[:3] == (0, 0, 0) and sort_key[4] <= 0.15:
+                return notes
+
         return best_notes
 
     @torch.no_grad()
     def generate_fugue(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
         best_notes = None
-        best_score = -1.0
+        best_key = None
         max_attempts = 5
-        threshold = 90.0
-        
+
         for attempt in range(max_attempts):
             if stream_queue and attempt > 0:
                 stream_queue.put({"type": "retry", "attempt": attempt + 1})
-                
+
             notes = self._generate_single_fugue_response(subject_notes, target_measures, temperature, refine_iters, stream_queue)
-            score = self._evaluate_harmony(notes)
-            
-            if score >= threshold:
-                return notes
-                
-            if score > best_score:
-                best_score = score
+            eval_res = evaluate_composition_official(notes, include_jsymbolic=True)
+            sort_key = official_candidate_sort_key(eval_res)
+
+            if best_key is None or sort_key < best_key:
+                best_key = sort_key
                 best_notes = notes
-                
+                self.last_official_evaluation = eval_res
+
+            if sort_key[:3] == (0, 0, 0) and sort_key[4] <= 0.15:
+                return notes
+
         return best_notes
 
     def _generate_single_fugue_response(self, subject_notes, target_measures=16, temperature=0.8, refine_iters=3, stream_queue=None):
@@ -1266,59 +1270,4 @@ class NeuralBachEngine:
         # 무한 지속음 버그의 원인이 된 로직을 비활성화하고, 자연스러운 쉼표(Rests)를 허용합니다.
         # 음표를 늘리는 대신 원본 노트 그대로 반환하여 악보 상에서 빈 공간이 Rests로 올바르게 표시되도록 합니다.
         return notes
-
-    def _evaluate_harmony(self, notes):
-        if not notes:
-            return 0.0
-            
-        # 1. 사용자 요구사항 검증: 한 성부 안에 있는 음이 2옥타브(24반음)를 초과하는지 검사
-        voice_pitches = {1: [], 2: [], 3: [], 4: []}
-        for n in notes:
-            voice_pitches[n["voice"]].append(n["pitch"])
-            
-        for v, pitches in voice_pitches.items():
-            if pitches:
-                if max(pitches) - min(pitches) > 24:
-                    # 2옥타브를 벗어나면 무조건 탈락 (점수 0점 반환하여 재작곡 유도)
-                    return 0.0
-                    
-        offsets = sorted(list(set(n["offset"] for n in notes)))
-        if not offsets:
-            return 100.0
-            
-        total_score = 0.0
-        evaluation_points = 0
-        
-        for off in offsets:
-            active_pitches = []
-            for n in notes:
-                if n["offset"] - 0.001 <= off < n["offset"] + n["duration"] - 0.001:
-                    active_pitches.append(n["pitch"])
-                    
-            if len(active_pitches) < 2:
-                total_score += 100.0
-                evaluation_points += 1
-                continue
-                
-            chord_score = 100.0
-            dissonant_count = 0
-            strong_dissonant_count = 0
-            
-            n_pitches = len(active_pitches)
-            for i in range(n_pitches):
-                for j in range(i + 1, n_pitches):
-                    diff = abs(active_pitches[i] - active_pitches[j]) % 12
-                    if diff in [1, 11]:  # Minor 2nd, Major 7th
-                        strong_dissonant_count += 1
-                    elif diff in [2, 10, 6]:  # Major 2nd, Minor 7th, Tritone
-                        dissonant_count += 1
-                        
-            chord_score -= (strong_dissonant_count * 25.0 + dissonant_count * 12.0)
-            chord_score = max(0.0, chord_score)
-            
-            total_score += chord_score
-            evaluation_points += 1
-            
-        average_score = total_score / evaluation_points if evaluation_points > 0 else 100.0
-        return average_score
 

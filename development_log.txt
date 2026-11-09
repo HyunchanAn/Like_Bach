@@ -199,3 +199,8 @@
   - 프로젝트 루트에 download_models.py를 추가하여 Hugging Face Hub(chemahc94/like-bach-models)로부터 V4/V5 가중치(.pt, .safetensors, .onnx) 및 단어장(.pkl) 8종을 일괄 다운로드하고 release_manifest.json 기준 SHA-256 해시 무결성을 검증하도록 구현함.
   - 가중치 및 단어장 유실 문제를 다룬 GitHub 이슈 #26에 해결 내역 코멘트를 게시하고 이슈를 닫음(Closed).
   - 심볼릭 음악 생성 및 대위법 평가를 위한 학계·오픈소스 5대 공인 평가 프레임워크(MusPy muspy.metrics, MGEval OA/KLD, Frechet Music Distance FMD, music21.figuredBass.checker 및 voiceLeading, jSymbolic 2.2 공식 특징 추출기 72종)와 바흐 원곡 코퍼스(music21.corpus) 실측 기준치를 정리하여 reports/261109_2340_symbolic_music_and_counterpoint_quality_evaluation_report.md 보고서에 반영함.
+- 기존 임의 휴리스틱 평가기(_evaluate_harmony) 전면 제거 및 공인 평가 엔진(src/v5/evaluator.py) 교체 완료 (메인 워크스테이션)
+  - src/v5/neural_engine.py 및 src/v4/neural_engine.py 내의 임의 감점 휴리스틱 함수(_evaluate_harmony: 딸림7화음까지 감점하고 병행 5·8도를 검사하지 못하던 로직)와 src/v5/evaluator.py의 빈 스텁을 전수 삭제함.
+  - src/v5/evaluator.py에 MIT music21.figuredBass.checker(parallelFifths, parallelOctaves, hiddenFifth, hiddenOctave, voiceCrossing) 및 possibility(voiceOverlap, upperPartsWithinLimit), McGill jSymbolic 2.2 공식 특징 추출기(StepwiseMotionFeature, MelodicTritonesFeature, AverageNumberOfIndependentVoicesFeature 등), UCSD MusPy 공식 수식(scale_consistency, polyphony, polyphony_rate, pitch_class_entropy, groove_consistency), Georgia Tech MGEval(Gaussian KDE 기반 Overlapping Area 및 KLD)을 통합 구현함.
+  - 코랄 및 푸가 생성 시 official_candidate_sort_key를 통해 공식 대위법 위배 건수(병행 5·8도, 성부 교차, 은복 5·8도, 성부 침범) 최소화와 바흐 원곡 코퍼스 참조치 대비 L1 편차 최소화 기준으로 최우수 후보를 선별하도록 연결하고, src/v5/api.py 응답에 official_evaluation 필드를 추가함.
+  - tests/test_official_evaluator.py 단위 및 통합 테스트를 작성하여 바흐 원곡(bwv66.6) 검증 및 병행 5·8도 검출 정확도를 확인함.
